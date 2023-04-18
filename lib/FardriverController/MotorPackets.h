@@ -58,6 +58,8 @@ typedef struct __attribute__ ((__packed__))
     uint16_t idout;
     _motor_packet_end_t _end;
 } motor_packet_0_t;
+// делаем статическую проверку, чтобы при правках случайно не пропустить разный размер структур
+static_assert(sizeof(motor_packet_raw_t) == sizeof(motor_packet_0_t), "Structures should have the same size!");
 
 typedef struct __attribute__ ((__packed__))
 {
@@ -71,6 +73,7 @@ typedef struct __attribute__ ((__packed__))
     uint16_t Trottle;
     _motor_packet_end_t _end;
 } motor_packet_1_t;
+static_assert(sizeof(motor_packet_raw_t) == sizeof(motor_packet_1_t), "Structures should have the same size!");
 
 
 
