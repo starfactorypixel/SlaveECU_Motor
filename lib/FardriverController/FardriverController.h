@@ -10,7 +10,7 @@
 #include "MotorErrors.h"
 #include "MotorPackets.h"
 
-template <uint8_t _motor_idx> 
+template <uint8_t _motor_idx = 0> 
 class FardriverController
 {
 	static const uint16_t _rx_buffer_timeout = 10;	// Время мс до сброса принимаемого пакета.
@@ -120,9 +120,9 @@ class FardriverController
 			}
 			
 			// Каждые _request_time отправляет запросы в контроллер.
-			if(time - _last_request_time > _request_time)
+			if(time - _request_last_time > _request_time)
 			{
-				_last_request_time = time;
+				_request_last_time = time;
 				
 				_tx_callback(_motor_idx, motor_packet_request_tx, sizeof(motor_packet_request_tx));
 			}
@@ -230,7 +230,7 @@ class FardriverController
 
 		bool _need_init_tx = false;
 
-		uint32_t _last_request_time = 0;
+		uint32_t _request_last_time = 0;
 
 		bool _isActive;
 

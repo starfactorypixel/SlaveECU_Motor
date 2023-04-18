@@ -12,14 +12,14 @@ void OnMotorEvent(const uint8_t motor_idx, const uint8_t data[16])
 	{
 		case 0x00:
 		{
-			motor_packet_0_t *data = (motor_packet_0_t*) & data;
+			motor_packet_0_t *data = (motor_packet_0_t*) &data;
 			// работа с data пакета 0.
 			
 			break;
 		}
 		case 0x01:
 		{
-			motor_packet_1_t *data = (motor_packet_1_t*) & data;
+			motor_packet_1_t *data = (motor_packet_1_t*) &data;
 			// работа с data пакета 1.
 			
 			break;
@@ -73,7 +73,7 @@ void loop()
 	}
 	
 	motor1.IsActive();
-	motor1.IsActive();
+	motor2.IsActive();
 	
 	return;
 }
