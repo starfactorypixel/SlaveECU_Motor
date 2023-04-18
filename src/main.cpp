@@ -25,4 +25,10 @@ void loop()
 	
 	motor1.Processing(current_time);
 	motor2.Processing(current_time);
+
+	if(Serial.available() > 0)
+	{
+		motor1.RXByte( Serial.read() , current_time);
+	}
+
 }
