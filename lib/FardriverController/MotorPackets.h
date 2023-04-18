@@ -1,5 +1,5 @@
 /*
-
+    Пакеты контроллера.
 */
 
 #pragma once
@@ -44,7 +44,7 @@ typedef struct __attribute__ ((__packed__))
     uint8_t Roll : 4;
     uint8_t Follow;
     uint16_t RPM;
-    uint16_t Errors;
+    motor_error_t ErrorFlags;
     uint16_t iqout;
     uint16_t idout;
     packet_end_t _end;
