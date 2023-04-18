@@ -55,8 +55,9 @@ void setup()
 	motor2.SetErrorCallback(OnMotorError);
 	motor1.SetTXCallback(OnMotorTX);
 	motor2.SetTXCallback(OnMotorTX);
+	
+	return;
 }
-
 
 void loop()
 {
@@ -70,5 +71,9 @@ void loop()
 		motor1.RXByte( Serial.read() , current_time);
 		motor2.RXByte( Serial.read() , current_time);
 	}
-
+	
+	motor1.IsActive();
+	motor1.IsActive();
+	
+	return;
 }

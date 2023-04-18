@@ -16,6 +16,7 @@ class FardriverController
 	static const uint16_t _rx_buffer_timeout = 10;	// Время мс до сброса принимаемого пакета.
 	static const uint8_t _rx_buffer_size = 16;		// Общий размер пакета.
 	static const uint16_t _request_time = 550;		// Интервал отправки запраса данных в контроллер.
+	static const uint16_t _unactive_timeout = 500;	// Время мс бездейтсвия, после которого считается что связи с контроллером нет.
 	
 	using event_callback_t = void(*)(const uint8_t motor_idx, const uint8_t data[_rx_buffer_size]);
 	using error_callback_t = void(*)(const uint8_t motor_idx, const motor_error_t code);
@@ -86,6 +87,7 @@ class FardriverController
 				{
 					memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
 					_work_buffer_ready = true;
+					_isActive = true;
 				}
 				
 				// Нету смысла чистить тут, потому что через паузу буфер будет очищен автматически.
@@ -93,6 +95,14 @@ class FardriverController
 			}
 			
 			return;
+		}
+		
+		/*
+			Флаг активного соединенеия с контроллером.
+		*/
+		bool IsActive()
+		{
+			return _isActive;
 		}
 		
 		/*
@@ -139,6 +149,12 @@ class FardriverController
 				}
 				
 				_work_buffer_ready = false;
+			}
+			
+			// Время послденего байта больше _unactive_timeout.
+			if(time - _rx_buffer_last_time > _unactive_timeout)
+			{
+				_isActive = false;
 			}
 			
 			return;
@@ -215,5 +231,9 @@ class FardriverController
 		bool _need_init_tx = false;
 
 		uint32_t _last_request_time = 0;
+
+		bool _isActive;
+
+		//enum state_t : uint8_t {STATE_IDLE, STATE_AUTH, STATE_WORK, STATE_LOST} _state = STATE_IDLE;
 		
 };
