@@ -4,14 +4,46 @@
 FardriverController<1> motor1;
 FardriverController<2> motor2;
 
-void OnMotorEvent(uint8_t num, uint8_t data[16])
+void OnMotorEvent(const uint8_t motor_idx, const uint8_t data[16])
 {
-
+	/*
+	// Пример.
+	switch (data[1])
+	{
+		case 0x00:
+		{
+			motor_packet_0_t *data = (motor_packet_0_t*) & data;
+			// работа с data пакета 0.
+			
+			break;
+		}
+		case 0x01:
+		{
+			motor_packet_1_t *data = (motor_packet_1_t*) & data;
+			// работа с data пакета 1.
+			
+			break;
+		}
+		default:
+		{
+			break;
+		}
+	}
+	*/
+	
+	return;
 }
 
-void OnMotorError(uint8_t num, motor_error_t code)
+void OnMotorError(const uint8_t motor_idx, const motor_error_t code)
 {
+	return;
+}
 
+void OnMotorTX(const uint8_t motor_idx, const uint8_t *data, const uint8_t data_len)
+{
+	Serial.write(data, data_len);
+	
+	return;
 }
 
 void setup()
@@ -21,6 +53,8 @@ void setup()
 	motor2.SetEventCallback(OnMotorEvent);
 	motor1.SetErrorCallback(OnMotorError);
 	motor2.SetErrorCallback(OnMotorError);
+	motor1.SetTXCallback(OnMotorTX);
+	motor2.SetTXCallback(OnMotorTX);
 }
 
 

@@ -6,20 +6,29 @@
 
 #include <inttypes.h>
 
+
+// Контроллер флудит rx пакетом и чтобы установить связь нужно ответить на него tx пакетом.
+static const uint8_t motor_packet_init_rx[] = {0x41, 0x54, 0x2B ,0x50 ,0x41 ,0x53, 0x53, 0x3D ,0x32, 0x39, 0x36, 0x38, 0x38, 0x37, 0x38, 0x31};
+static const uint8_t motor_packet_init_tx[] = {0x2B, 0x50, 0x41, 0x53, 0x53, 0x3D, 0x4F, 0x4E, 0x4E, 0x44, 0x4F, 0x4E, 0x4B, 0x45};
+
+// Чтобы запросить данные с контроллера нужно отправить пакет tx и получить пачку (38) rx пакетов.
+static const uint8_t motor_packet_request_tx[] = {0xAA, 0x13, 0xEC, 0x07, 0x09, 0x6F, 0x28, 0xD7};
+
+// Далее идут пакеты ответа на вышеотправленный tx пакет.
 typedef struct __attribute__ ((__packed__))
 {
     uint8_t start;
     uint8_t id;
-} packet_start_t;
+} _motor_packet_start_t;
 
 typedef struct __attribute__ ((__packed__))
 {
     uint16_t crc;
-} packet_end_t;
+} _motor_packet_end_t;
 
 typedef struct __attribute__ ((__packed__))
 {
-    packet_start_t _start;
+    _motor_packet_start_t _start;
     uint8_t D0;
     uint8_t D1;
     uint8_t D2;
@@ -32,12 +41,12 @@ typedef struct __attribute__ ((__packed__))
     uint8_t D9;
     uint8_t D10;
     uint8_t D11;
-    packet_end_t _end;
-} packet_raw_t;
+    _motor_packet_end_t _end;
+} motor_packet_raw_t;
 
 typedef struct __attribute__ ((__packed__))
 {
-    packet_start_t _start;
+    _motor_packet_start_t _start;
     uint8_t MTPAAngle;
     uint8_t Hall;
     uint8_t Gear : 4;
@@ -47,12 +56,12 @@ typedef struct __attribute__ ((__packed__))
     motor_error_t ErrorFlags;
     uint16_t iqout;
     uint16_t idout;
-    packet_end_t _end;
-} packet_0_t;
+    _motor_packet_end_t _end;
+} motor_packet_0_t;
 
 typedef struct __attribute__ ((__packed__))
 {
-    packet_start_t _start;
+    _motor_packet_start_t _start;
     uint16_t Voltage;
     uint16_t Current;
     uint8_t ModRatio;
@@ -60,8 +69,8 @@ typedef struct __attribute__ ((__packed__))
     uint16_t iqin;
     uint16_t idin;
     uint16_t Trottle;
-    packet_end_t _end;
-} packet_1_t;
+    _motor_packet_end_t _end;
+} motor_packet_1_t;
 
 
 
