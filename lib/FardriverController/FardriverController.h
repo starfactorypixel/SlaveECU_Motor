@@ -111,10 +111,6 @@ class FardriverController
 		*/
 		void Processing(uint32_t time)
 		{
-			// Если нет коннекта, то нечего мучиться
-			// Как только появится запрос авторизации, так состояние сразу станет Active 
-			if ( !IsActive() ) return;
-
 			// Нужно ответить на запрос авторизации.
 			if(_need_init_tx == true)
 			{
