@@ -17,4 +17,6 @@ struct MotorData
 	uint8_t TMotor;
 	uint8_t TController;
 	uint32_t Odometer;
+	uint8_t D2;
+	uint16_t Errors;
 };

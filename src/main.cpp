@@ -19,9 +19,11 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 		case 0x00:
 		{
 			motor_packet_0_t *data = (motor_packet_0_t*) raw_packet;
-			ParsedData.Roll = data->Roll;
-			ParsedData.Gear = data->Gear;
+			ParsedData.Roll = (data->Roll & 0x03);
+			ParsedData.Gear = (data->Gear & 0x03);
 			ParsedData.RPM = data->RPM;
+			ParsedData.D2 = raw_packet->D2;
+			ParsedData.Errors = data->ErrorFlags;
 			
 			break;
 		}
@@ -103,7 +105,7 @@ void loop()
 	//motor2.IsActive();
 
 	static uint32_t half_second = 0;
-	if(current_time - half_second > 500)
+	if(current_time - half_second > 250)
 	{
 		half_second = current_time;
 
@@ -118,17 +120,17 @@ void loop()
 char LCDCurrentString[4][20] = {0x20};
 char buffer[4][20];
 
-char chars_gear[] = {'E', 'F', 'R', 'L'};
-char chars_rool[] = {'S', 'F', 'R'};
+char chars_gear[] = {'N', 'F', 'R', 'L'};
+char chars_rool[] = {'S', 'F', 'R', 'r'};
 
 void Draw()
 {
 	memset(&buffer, 0x20, sizeof(buffer));
 	
-	sprintf(buffer[0], "RPM: %04d  Gear: %c", ParsedData.RPM, chars_gear[ParsedData.Gear]);
-	sprintf(buffer[1], "V:  %02d.%d   Roll: %c", (ParsedData.Voltage / 10), (ParsedData.Voltage % 10), chars_rool[ParsedData.Roll]);
-	sprintf(buffer[2], "A: %03d.%d   Tm: %02d", (ParsedData.Current / 4), (ParsedData.Current % 4), ParsedData.TMotor);
-	sprintf(buffer[3], "W: %05d   Tc: %02d", (uint16_t)((ParsedData.Voltage / 10.0) * (ParsedData.Current / 4.0)), ParsedData.TController);
+	sprintf(buffer[0], "RPM: %04d Gear: %c %02X", ParsedData.RPM, chars_gear[ParsedData.Gear], ParsedData.D2);
+	sprintf(buffer[1], "V:   %02d.%d Roll: %c", (ParsedData.Voltage / 10), (ParsedData.Voltage % 10), chars_rool[ParsedData.Roll]);
+	sprintf(buffer[2], "A: %04d.%d Tm: %02d E%02X", (ParsedData.Current / 4), (ParsedData.Current % 4), ParsedData.TMotor, (ParsedData.Errors >> 8));
+	sprintf(buffer[3], "W: %05d  Tc: %02d e%02X", (uint16_t)((ParsedData.Voltage / 10.0) * (ParsedData.Current / 4.0)), ParsedData.TController, (ParsedData.Errors & 0xFF));
 	
 	for(uint8_t i = 0; i < sizeof(buffer); ++i)
 	{
