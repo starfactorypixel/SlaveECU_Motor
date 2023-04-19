@@ -73,17 +73,17 @@ class FardriverController
 			}
 			
 			// Если есть место для нового байта.
-			if(_rx_buffer_idx < _rx_buffer_size)
+			if (_rx_buffer_idx > 0)
 			{
 				_rx_buffer_last_time = time;
 
-				_rx_buffer[_rx_buffer_idx++] = data;
+				_rx_buffer[--_rx_buffer_idx] = data;
 			}
 			
-			// Если размер принятых байт равен _rx_buffer_size.
-			if(_rx_buffer_idx == _rx_buffer_size)
+			// Если приняли весь пакет
+			if(_rx_buffer_idx == 0)
 			{
-				_CheckBuffFormat();
+				_ValidateBuffer();
 			}
 			
 			return;
@@ -160,13 +160,11 @@ class FardriverController
 		/*
 			Проверяет принятый пакет на валидность.
 		*/
-		inline void _CheckBuffFormat()
+		inline void _ValidateBuffer()
 		{
 			// Если приняли 'нормальный' пакет.
-			if(_rx_buffer[0] == 0xAA)
+			if(_rx_buffer[_rx_buffer_size - 1] == 0xAA)
 			{
-				_ReverseBuff();
-				
 				motor_packet_raw_t *obj = (motor_packet_raw_t*) _rx_buffer;
 				if( _GetBuffCRC() == obj->_CRC)
 				{
@@ -205,26 +203,11 @@ class FardriverController
 		void _ClearBuff()
 		{
 			memset(&_rx_buffer, 0x00, _rx_buffer_size);
-			_rx_buffer_idx = 0;
+			_rx_buffer_idx = _rx_buffer_size;
 			
 			return;
 		}
 
-		/*
-			Переворачивает принятый массив не трогая первые два байта.
-		*/
-		void _ReverseBuff()
-		{
-			uint8_t temp;
-			for(uint8_t low = 0, high = _rx_buffer_size - 1; low < high; ++low, --high)
-			{
-				temp = _rx_buffer[low];
-				_rx_buffer[low] = _rx_buffer[high];
-				_rx_buffer[high] = temp;
-			}
-
-			return;
-		}
 		
 		
 		event_callback_t _event_callback = nullptr;
