@@ -18,7 +18,7 @@ class FardriverController
 	static const uint16_t _request_time = 550;		// Интервал отправки запраса данных в контроллер.
 	static const uint16_t _unactive_timeout = 500;	// Время мс бездейтсвия, после которого считается что связи с контроллером нет.
 	
-	using event_callback_t = void(*)(const uint8_t motor_idx, const uint8_t raw[_rx_buffer_size]);
+	using event_callback_t = void(*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
 	using error_callback_t = void(*)(const uint8_t motor_idx, const motor_error_t code);
 	using tx_callback_t = void(*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
 
@@ -123,23 +123,24 @@ class FardriverController
 			if(_work_buffer_ready == true)
 			{
 				// Вычитываем ошибки, и вызываем колбек, если нужно.
-				if(_work_buffer[1] == 0x00 && _error_callback != nullptr)
+				if(_error_callback != nullptr)
 				{
-					motor_packet_0_t *packet = (motor_packet_0_t*) _work_buffer;
-					//uint16_t buff_error_flags = (uint16_t)_work_buffer[8] << 8 | _work_buffer[9];
-					//packet->ErrorFlags = (motor_error_t)swap_uint16(packet->ErrorFlags);
-					if(packet->ErrorFlags != _lastErrorFlags)
+					motor_packet_0_t *obj = (motor_packet_0_t*) _work_buffer;
+					
+					if(obj->_A1 == 0x00 && obj->ErrorFlags != _lastErrorFlags)
 					{
-						_lastErrorFlags = packet->ErrorFlags;
+						_lastErrorFlags = obj->ErrorFlags;
 						
-						_error_callback(_motor_idx, packet->ErrorFlags);
+						_error_callback(_motor_idx, obj->ErrorFlags);
 					}
 				}
 				
 				// Вызываем колбек события, если он зарегистрирован.
 				if(_event_callback != nullptr)
 				{
-					_event_callback(_motor_idx, _work_buffer);
+					motor_packet_raw_t *obj = (motor_packet_raw_t*) _work_buffer;
+					
+					_event_callback(_motor_idx, obj);
 				}
 				
 				_work_buffer_ready = false;
@@ -164,11 +165,11 @@ class FardriverController
 			// Если приняли 'нормальный' пакет.
 			if(_rx_buffer[0] == 0xAA)
 			{
-				uint16_t buff_crc = (uint16_t)_rx_buffer[14] << 8 | _rx_buffer[15];
-				if( _GetBuffCRC() == buff_crc )
+				_ReverseBuff();
+				
+				motor_packet_raw_t *obj = (motor_packet_raw_t*) _rx_buffer;
+				if( _GetBuffCRC() == obj->_CRC)
 				{
-					_ReverseBuff();
-					
 					memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
 					_work_buffer_ready = true;
 					_isActive = true;
@@ -190,7 +191,7 @@ class FardriverController
 		{
 			uint16_t result = 0x0000;
 			
-			for(uint8_t i = 0; i < (_rx_buffer_size - 2); ++i)
+			for(uint8_t i = 2; i < _rx_buffer_size; ++i)
 			{
 				result += _rx_buffer[i];
 			}
@@ -215,7 +216,7 @@ class FardriverController
 		void _ReverseBuff()
 		{
 			uint8_t temp;
-			for(uint8_t low = 2, high = _rx_buffer_size - 1; low < high; ++low, --high)
+			for(uint8_t low = 0, high = _rx_buffer_size - 1; low < high; ++low, --high)
 			{
 				temp = _rx_buffer[low];
 				_rx_buffer[low] = _rx_buffer[high];

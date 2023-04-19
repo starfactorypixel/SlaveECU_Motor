@@ -12,13 +12,13 @@ FardriverController<1> motor1;
 
 MotorData ParsedData;
 
-void OnMotorEvent(const uint8_t motor_idx, const uint8_t raw[16])
+void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 {
-	switch (raw[1])
+	switch (raw_packet->_A1)
 	{
 		case 0x00:
 		{
-			motor_packet_0_t *data = (motor_packet_0_t*) raw;
+			motor_packet_0_t *data = (motor_packet_0_t*) raw_packet;
 			ParsedData.Roll = data->Roll;
 			ParsedData.Gear = data->Gear;
 			ParsedData.RPM = data->RPM;
@@ -27,7 +27,7 @@ void OnMotorEvent(const uint8_t motor_idx, const uint8_t raw[16])
 		}
 		case 0x01:
 		{
-			motor_packet_1_t *data = (motor_packet_1_t*) raw;
+			motor_packet_1_t *data = (motor_packet_1_t*) raw_packet;
 			ParsedData.Voltage = data->Voltage;
 			ParsedData.Current = data->Current;
 			
@@ -35,13 +35,13 @@ void OnMotorEvent(const uint8_t motor_idx, const uint8_t raw[16])
 		}
 		case 0x04:
 		{
-			ParsedData.TController = raw[13];
+			ParsedData.TController = raw_packet->D2;
 			
 			break;
 		}
 		case 0x0D:
 		{
-			ParsedData.TMotor = raw[15];
+			ParsedData.TMotor = raw_packet->D0;
 			
 			break;
 		}
