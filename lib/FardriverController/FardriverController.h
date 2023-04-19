@@ -18,10 +18,10 @@ class FardriverController
 	static const uint16_t _request_time = 550;		// Интервал отправки запраса данных в контроллер.
 	static const uint16_t _unactive_timeout = 500;	// Время мс бездейтсвия, после которого считается что связи с контроллером нет.
 	
-	using event_callback_t = void(*)(const uint8_t motor_idx, const uint8_t data[_rx_buffer_size]);
+	using event_callback_t = void(*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
 	using error_callback_t = void(*)(const uint8_t motor_idx, const motor_error_t code);
-	using tx_callback_t = void(*)(const uint8_t motor_idx, const uint8_t *data, const uint8_t data_len);
-	
+	using tx_callback_t = void(*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
+
 	public:
 		
 		FardriverController()
@@ -73,25 +73,17 @@ class FardriverController
 			}
 			
 			// Если есть место для нового байта.
-			if(_rx_buffer_idx < _rx_buffer_size)
+			if (_rx_buffer_idx > 0)
 			{
 				_rx_buffer_last_time = time;
 
-				_rx_buffer[_rx_buffer_idx++] = data;
+				_rx_buffer[--_rx_buffer_idx] = data;
 			}
 			
-			// Если размер принятых байт равен _rx_buffer_size.
-			if(_rx_buffer_idx == _rx_buffer_size)
+			// Если приняли весь пакет
+			if(_rx_buffer_idx == 0)
 			{
-				if( _CheckBuffFormat() == true )
-				{
-					memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
-					_work_buffer_ready = true;
-					_isActive = true;
-				}
-				
-				// Нету смысла чистить тут, потому что через паузу буфер будет очищен автматически.
-				//_ClearBuff();
+				_ValidateBuffer();
 			}
 			
 			return;
@@ -131,21 +123,24 @@ class FardriverController
 			if(_work_buffer_ready == true)
 			{
 				// Вычитываем ошибки, и вызываем колбек, если нужно.
-				if(_work_buffer[1] == 0x00 && _error_callback != nullptr)
+				if(_error_callback != nullptr)
 				{
-					motor_packet_0_t *packet = (motor_packet_0_t*) &_work_buffer;
-					if(packet->ErrorFlags != _lastErrorFlags)
+					motor_packet_0_t *obj = (motor_packet_0_t*) _work_buffer;
+					
+					if(obj->_A1 == 0x00 && obj->ErrorFlags != _lastErrorFlags)
 					{
-						_lastErrorFlags = packet->ErrorFlags;
+						_lastErrorFlags = obj->ErrorFlags;
 						
-						_error_callback(_motor_idx, packet->ErrorFlags);
+						_error_callback(_motor_idx, obj->ErrorFlags);
 					}
 				}
 				
 				// Вызываем колбек события, если он зарегистрирован.
 				if(_event_callback != nullptr)
 				{
-					_event_callback(_motor_idx, _work_buffer);
+					motor_packet_raw_t *obj = (motor_packet_raw_t*) _work_buffer;
+					
+					_event_callback(_motor_idx, obj);
 				}
 				
 				_work_buffer_ready = false;
@@ -165,18 +160,17 @@ class FardriverController
 		/*
 			Проверяет принятый пакет на валидность.
 		*/
-		inline bool _CheckBuffFormat()
+		inline void _ValidateBuffer()
 		{
-			bool result = false;
-			
 			// Если приняли 'нормальный' пакет.
-			if(_rx_buffer[0] == 0xAA)
+			if(_rx_buffer[_rx_buffer_size - 1] == 0xAA)
 			{
-				motor_packet_raw_t *raw = (motor_packet_raw_t*) &_rx_buffer;
-				
-				if( _GetBuffCRC() == raw->_end.crc )
+				motor_packet_raw_t *obj = (motor_packet_raw_t*) _rx_buffer;
+				if( _GetBuffCRC() == obj->_CRC)
 				{
-					result = true;
+					memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
+					_work_buffer_ready = true;
+					_isActive = true;
 				}
 			}
 			// Если приняли пакет авторизации.
@@ -185,7 +179,7 @@ class FardriverController
 				_need_init_tx = true;
 			}
 			
-			return result;
+			return;
 		}
 
 		/*
@@ -195,7 +189,7 @@ class FardriverController
 		{
 			uint16_t result = 0x0000;
 			
-			for(uint8_t i = 0; i < (_rx_buffer_size - 2); ++i)
+			for(uint8_t i = 2; i < _rx_buffer_size; ++i)
 			{
 				result += _rx_buffer[i];
 			}
@@ -209,10 +203,11 @@ class FardriverController
 		void _ClearBuff()
 		{
 			memset(&_rx_buffer, 0x00, _rx_buffer_size);
-			_rx_buffer_idx = 0;
+			_rx_buffer_idx = _rx_buffer_size;
 			
 			return;
 		}
+
 		
 		
 		event_callback_t _event_callback = nullptr;
