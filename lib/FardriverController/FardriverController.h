@@ -1,8 +1,11 @@
 /*
-	Класс парсинга пакетов UART контроллеров FarDriver.
-		Nanjing FarDriver Controller Co., Ltd.
-		SIAYQ FarDriver Controller.
+	Класс парсинга пакетов UART контроллеров FarDriver:
+		Nanjing FarDriver Controller Co., Ltd;
+		SIAYQ FarDriver Controller;
 	Отдельное спасибо Китайцам, которые зажопили протокол...
+
+	PS: Для упрощения работы с пакетом, данные принимаются в обратном порядке, т.е. порядок байт такой:
+		[ CRC | D11 | D10 | D9 | D8 | D7 | D6 | D5 | D4 | D3 | D2 | D1 | D0 | A1 | A0 ]
 */
 
 #pragma once
