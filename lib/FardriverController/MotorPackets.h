@@ -61,7 +61,7 @@ typedef struct __attribute__ ((__packed__))
     uint16_t iqin;
     uint8_t WorkStat;
     uint8_t ModRatio;
-    uint16_t Current;
+    int16_t Current;
     uint16_t Voltage;
     uint8_t _A1;
     uint8_t _A0;
