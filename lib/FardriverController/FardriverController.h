@@ -13,225 +13,200 @@
 #include "MotorErrors.h"
 #include "MotorPackets.h"
 
-template <uint8_t _motor_idx = 0> 
+template <uint8_t _motor_idx = 0>
 class FardriverController
 {
-	static const uint16_t _rx_buffer_timeout = 10;	// Время мс до сброса принимаемого пакета.
-	static const uint8_t _rx_buffer_size = 16;		// Общий размер пакета.
-	static const uint16_t _request_time = 550;		// Интервал отправки запраса данных в контроллер.
-	static const uint16_t _unactive_timeout = 500;	// Время мс бездейтсвия, после которого считается что связи с контроллером нет.
-	
-	using event_callback_t = void(*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
-	using error_callback_t = void(*)(const uint8_t motor_idx, const motor_error_t code);
-	using tx_callback_t = void(*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
+	static const uint16_t _rx_buffer_timeout = 10; // Время мс до сброса принимаемого пакета.
+	static const uint8_t _rx_buffer_size = 16;	   // Общий размер пакета.
+	static const uint16_t _request_time = 550;	   // Интервал отправки запраса данных в контроллер.
+	static const uint16_t _unactive_timeout = 500; // Время мс бездейтсвия, после которого считается что связи с контроллером нет.
 
-	public:
-		
-		FardriverController()
+	using event_callback_t = void (*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
+	using error_callback_t = void (*)(const uint8_t motor_idx, const motor_error_t code);
+	using tx_callback_t = void (*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
+
+public:
+	FardriverController()
+	{
+		_ClearBuff();
+	}
+
+	/*
+		Регистрирует колбек, который возвращает принятый пакет.
+	*/
+	void SetEventCallback(event_callback_t callback)
+	{
+		_event_callback = callback;
+	}
+
+	/*
+		Регистрирует колбек, который возвращает принятый флаг(и) ошибок.
+	*/
+	void SetErrorCallback(error_callback_t callback)
+	{
+		_error_callback = callback;
+	}
+
+	/*
+		Регистрирует колбек, который отправляет данные контроллеру.
+	*/
+	void SetTXCallback(tx_callback_t callback)
+	{
+		_tx_callback = callback;
+	}
+
+	/*
+		(Interrupt) Вставка принятого байта и обработка пакета.
+	*/
+	void RXByte(uint8_t data, uint32_t time)
+	{
+		// Если с момента последнего байта прошло более _packet_timeout мс.
+		if (time - _rx_buffer_timeout > _rx_buffer_last_time)
 		{
 			_ClearBuff();
+		}
 
-			return;
-		}
-		
-		/*
-			Регистрирует колбек, который возвращает принятый пакет.
-		*/
-		void SetEventCallback(event_callback_t callback)
+		// Если есть место для нового байта.
+		if (_rx_buffer_idx > 0)
 		{
-			_event_callback = callback;
-			
-			return;
+			_rx_buffer_last_time = time;
+			_rx_buffer[--_rx_buffer_idx] = data;
 		}
-		
-		/*
-			Регистрирует колбек, который возвращает принятый флаг(и) ошибок.
-		*/
-		void SetErrorCallback(error_callback_t callback)
-		{
-			_error_callback = callback;
 
-			return;
-		}
-		
-		/*
-			Регистрирует колбек, который отправляет данные контроллеру.
-		*/
-		void SetTXCallback(tx_callback_t callback)
+		// Если приняли весь пакет
+		if (_rx_buffer_idx == 0)
 		{
-			_tx_callback = callback;
-			
-			return;
+			_ValidateBuffer();
 		}
-		
-		/*
-			(Interrupt) Вставка принятого байта и обработка пакета.
-		*/
-		void RXByte(uint8_t data, uint32_t time)
-		{
-			// Если с момента последнего байта прошло более _packet_timeout мс.
-			if(time - _rx_buffer_timeout > _rx_buffer_last_time)
-			{
-				_ClearBuff();
-			}
-			
-			// Если есть место для нового байта.
-			if (_rx_buffer_idx > 0)
-			{
-				_rx_buffer_last_time = time;
+	}
 
-				_rx_buffer[--_rx_buffer_idx] = data;
-			}
-			
-			// Если приняли весь пакет
-			if(_rx_buffer_idx == 0)
-			{
-				_ValidateBuffer();
-			}
-			
-			return;
-		}
-		
-		/*
-			Флаг активного соединенеия с контроллером.
-		*/
-		bool IsActive()
+	/*
+		Флаг активного соединенеия с контроллером.
+	*/
+	bool IsActive()
+	{
+		return _isActive;
+	}
+
+	/*
+		Обработка принытых данных.
+		Вызываться должна с интервалом, не более 30 мс!
+	*/
+	void Processing(uint32_t time)
+	{
+		// Нужно ответить на запрос авторизации.
+		if (_need_init_tx == true)
 		{
-			return _isActive;
+			_tx_callback(_motor_idx, motor_packet_init_tx, sizeof(motor_packet_init_tx));
+			_need_init_tx = false;
 		}
-		
-		/*
-			Обработка принытых данных.
-			Вызываться должна с интервалом, не более 30 мс!
-		*/
-		void Processing(uint32_t time)
+
+		// Каждые _request_time отправляет запросы в контроллер.
+		if (time - _request_last_time > _request_time)
 		{
-			// Нужно ответить на запрос авторизации.
-			if(_need_init_tx == true)
+			_request_last_time = time;
+			_tx_callback(_motor_idx, motor_packet_request_tx, sizeof(motor_packet_request_tx));
+		}
+
+		// Обработка принятого пакета.
+		if (_work_buffer_ready == true)
+		{
+			// Вычитываем ошибки, и вызываем колбек, если нужно.
+			if (_error_callback != nullptr)
 			{
-				_tx_callback(_motor_idx, motor_packet_init_tx, sizeof(motor_packet_init_tx));
-				
-				_need_init_tx = false;
-			}
-			
-			// Каждые _request_time отправляет запросы в контроллер.
-			if(time - _request_last_time > _request_time)
-			{
-				_request_last_time = time;
-				
-				_tx_callback(_motor_idx, motor_packet_request_tx, sizeof(motor_packet_request_tx));
-			}
-			
-			// Обработка принятого пакета.
-			if(_work_buffer_ready == true)
-			{
-				// Вычитываем ошибки, и вызываем колбек, если нужно.
-				if(_error_callback != nullptr)
+				motor_packet_0_t *obj = (motor_packet_0_t *)_work_buffer;
+
+				if (obj->_A1 == 0x00 && obj->ErrorFlags != _lastErrorFlags)
 				{
-					motor_packet_0_t *obj = (motor_packet_0_t*) _work_buffer;
-					
-					if(obj->_A1 == 0x00 && obj->ErrorFlags != _lastErrorFlags)
-					{
-						_lastErrorFlags = obj->ErrorFlags;
-						
-						_error_callback(_motor_idx, obj->ErrorFlags);
-					}
-				}
-				
-				// Вызываем колбек события, если он зарегистрирован.
-				if(_event_callback != nullptr)
-				{
-					motor_packet_raw_t *obj = (motor_packet_raw_t*) _work_buffer;
-					
-					_event_callback(_motor_idx, obj);
-				}
-				
-				_work_buffer_ready = false;
-			}
-			
-			// Время послденего байта больше _unactive_timeout.
-			if(time - _rx_buffer_last_time > _unactive_timeout)
-			{
-				_isActive = false;
-			}
-			
-			return;
-		}
-		
-	private:
-
-		/*
-			Проверяет принятый пакет на валидность.
-		*/
-		inline void _ValidateBuffer()
-		{
-			// Если приняли 'нормальный' пакет.
-			if(_rx_buffer[_rx_buffer_size - 1] == 0xAA)
-			{
-				motor_packet_raw_t *obj = (motor_packet_raw_t*) _rx_buffer;
-				if( _GetBuffCRC() == obj->_CRC)
-				{
-					memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
-					_work_buffer_ready = true;
-					_isActive = true;
+					_lastErrorFlags = obj->ErrorFlags;
+					_error_callback(_motor_idx, obj->ErrorFlags);
 				}
 			}
-			// Если приняли пакет авторизации.
-			else if( memcmp(&motor_packet_init_rx, &_rx_buffer, _rx_buffer_size) == 0 )
+
+			// Вызываем колбек события, если он зарегистрирован.
+			if (_event_callback != nullptr)
 			{
-				_need_init_tx = true;
+				motor_packet_raw_t *obj = (motor_packet_raw_t *)_work_buffer;
+
+				_event_callback(_motor_idx, obj);
 			}
-			
-			return;
+
+			_work_buffer_ready = false;
 		}
 
-		/*
-			Расчитывает CRC принятого пакета.
-		*/
-		inline uint16_t _GetBuffCRC()
+		// Время послденего байта больше _unactive_timeout.
+		if (time - _rx_buffer_last_time > _unactive_timeout)
 		{
-			uint16_t result = 0x0000;
-			
-			for(uint8_t i = 2; i < _rx_buffer_size; ++i)
+			_isActive = false;
+		}
+	}
+
+private:
+	/*
+		Проверяет принятый пакет на валидность.
+	*/
+	inline void _ValidateBuffer()
+	{
+		// Если приняли 'нормальный' пакет.
+		if (_rx_buffer[_rx_buffer_size - 1] == 0xAA)
+		{
+			motor_packet_raw_t *obj = (motor_packet_raw_t *)_rx_buffer;
+			if (_GetBuffCRC() == obj->_CRC)
 			{
-				result += _rx_buffer[i];
+				memcpy(&_work_buffer, _rx_buffer, _rx_buffer_size);
+				_work_buffer_ready = true;
+				_isActive = true;
 			}
-			
-			return result;
 		}
-		
-		/*
-			Очищает буфер.
-		*/
-		void _ClearBuff()
+		// Если приняли пакет авторизации.
+		else if (memcmp(&motor_packet_init_rx, &_rx_buffer, _rx_buffer_size) == 0)
 		{
-			memset(&_rx_buffer, 0x00, _rx_buffer_size);
-			_rx_buffer_idx = _rx_buffer_size;
-			
-			return;
+			_need_init_tx = true;
+		}
+	}
+
+	/*
+		Расчитывает CRC принятого пакета.
+	*/
+	inline uint16_t _GetBuffCRC()
+	{
+		uint16_t result = 0x0000;
+
+		for (uint8_t i = 2; i < _rx_buffer_size; ++i)
+		{
+			result += _rx_buffer[i];
 		}
 
-		
-		
-		event_callback_t _event_callback = nullptr;
-		error_callback_t _error_callback = nullptr;
-		tx_callback_t _tx_callback = nullptr;
-		
-		uint8_t _rx_buffer[_rx_buffer_size];	// Приёмный (горячий) буфер.
-		uint8_t _rx_buffer_idx;					// Индекс принимаего байта.
-		uint32_t _rx_buffer_last_time = 0;		// Время мс последнего принятого байта.
+		return result;
+	}
 
-		uint8_t _work_buffer[_rx_buffer_size];	// Рабочий (холодный) буфер.
-		bool _work_buffer_ready = false;		// Готовность рабочего буфера.
-		
-		uint16_t _lastErrorFlags = 0x0000;
+	/*
+		Очищает буфер.
+	*/
+	void _ClearBuff()
+	{
+		memset(&_rx_buffer, 0x00, _rx_buffer_size);
+		_rx_buffer_idx = _rx_buffer_size;
+	}
 
-		bool _need_init_tx = false;
+	event_callback_t _event_callback = nullptr;
+	error_callback_t _error_callback = nullptr;
+	tx_callback_t _tx_callback = nullptr;
 
-		uint32_t _request_last_time = 0;
+	uint8_t _rx_buffer[_rx_buffer_size]; // Приёмный (горячий) буфер.
+	uint8_t _rx_buffer_idx;				 // Индекс принимаего байта.
+	uint32_t _rx_buffer_last_time = 0;	 // Время мс последнего принятого байта.
 
-		bool _isActive;
+	uint8_t _work_buffer[_rx_buffer_size]; // Рабочий (холодный) буфер.
+	bool _work_buffer_ready = false;	   // Готовность рабочего буфера.
 
-		//enum state_t : uint8_t {STATE_IDLE, STATE_AUTH, STATE_WORK, STATE_LOST} _state = STATE_IDLE;
-		
+	uint16_t _lastErrorFlags = 0x0000;
+
+	bool _need_init_tx = false;
+
+	uint32_t _request_last_time = 0;
+
+	bool _isActive;
+
+	// enum state_t : uint8_t {STATE_IDLE, STATE_AUTH, STATE_WORK, STATE_LOST} _state = STATE_IDLE;
 };

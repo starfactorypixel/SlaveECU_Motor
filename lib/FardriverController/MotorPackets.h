@@ -7,7 +7,7 @@
 #include <inttypes.h>
 
 // Контроллер флудит rx пакетом и чтобы установить связь нужно ответить на него tx пакетом.
-//static const uint8_t motor_packet_init_rx[] = {0x41, 0x54, 0x2B ,0x50 ,0x41 ,0x53, 0x53, 0x3D ,0x32, 0x39, 0x36, 0x38, 0x38, 0x37, 0x38, 0x31};
+// static const uint8_t motor_packet_init_rx[] = {0x41, 0x54, 0x2B ,0x50 ,0x41 ,0x53, 0x53, 0x3D ,0x32, 0x39, 0x36, 0x38, 0x38, 0x37, 0x38, 0x31};
 // reverse order of original packet
 static const uint8_t motor_packet_init_rx[] = {0x31, 0x38, 0x37, 0x38, 0x38, 0x36, 0x39, 0x32, 0x3D, 0x53, 0x53, 0x41, 0x50, 0x2B, 0x54, 0x41};
 static const uint8_t motor_packet_init_tx[] = {0x2B, 0x50, 0x41, 0x53, 0x53, 0x3D, 0x4F, 0x4E, 0x4E, 0x44, 0x4F, 0x4E, 0x4B, 0x45};
@@ -16,7 +16,7 @@ static const uint8_t motor_packet_init_tx[] = {0x2B, 0x50, 0x41, 0x53, 0x53, 0x3
 static const uint8_t motor_packet_request_tx[] = {0xAA, 0x13, 0xEC, 0x07, 0x09, 0x6F, 0x28, 0xD7};
 
 // Далее идут пакеты ответа на вышеотправленный tx пакет.
-typedef struct __attribute__ ((__packed__))
+typedef struct __attribute__((__packed__))
 {
     uint16_t _CRC;
     uint8_t D11;
@@ -35,7 +35,7 @@ typedef struct __attribute__ ((__packed__))
     uint8_t _A0;
 } motor_packet_raw_t;
 
-typedef struct __attribute__ ((__packed__))
+typedef struct __attribute__((__packed__))
 {
     uint16_t _CRC;
     uint16_t idout;
@@ -53,7 +53,7 @@ typedef struct __attribute__ ((__packed__))
 // делаем статическую проверку, чтобы при правках случайно не пропустить разный размер структур
 static_assert(sizeof(motor_packet_raw_t) == sizeof(motor_packet_0_t), "Structures should have the same size!");
 
-typedef struct __attribute__ ((__packed__))
+typedef struct __attribute__((__packed__))
 {
     uint16_t _CRC;
     uint16_t Trottle;

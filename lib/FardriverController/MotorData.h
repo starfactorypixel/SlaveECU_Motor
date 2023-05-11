@@ -10,7 +10,7 @@
 // 0x0101	BlockHealth
 // 0x0102	BlockCfg
 // 0x0103	BlockError
-struct __attribute__((__packed__))  MotorData
+struct __attribute__((__packed__)) MotorData
 {
 	// 0x0104	ControllerErrors
 	uint16_t Errors;
