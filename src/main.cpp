@@ -18,6 +18,7 @@
 
 #include "main.h"
 
+#include <cmath>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -41,6 +42,10 @@ UART_HandleTypeDef huart3; // motor 2
 uint32_t Timer1 = 0;
 
 uint32_t odometer_last_update = 0;
+
+uint16_t WheelRadius = 2850;						// Радиус колеса, 100u.
+uint32_t WheelLenght = (2UL * M_PI * WheelRadius) + 0.5;	// Длина колеса, мм.
+uint32_t SpeedCoef = WheelLenght * 60UL;			// Коэффициент скорости, просто добавить RPM и сдвинь на 20 вправо.
 
 //------------------------ For UART
 #define UART_BUFFER_SIZE 128
@@ -188,14 +193,16 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         // TODO: Optimization of speed calculation needed!
         // D=0.57m, WHEEL_LENGTH=Pi*D и делим на 100 для скорости в 100м/ч
         // при RPM >= 61019 об/мин получим переполнение
-        CANLib::obj_controller_speed.SetValue(idx, (uint16_t)(60 * packet0->RPM * 0.0179), CAN_TIMER_TYPE_NORMAL);
+		//CANLib::obj_controller_speed.SetValue(idx, (uint16_t)(60 * packet0->RPM * 0.0179), CAN_TIMER_TYPE_NORMAL);
+		CANLib::obj_controller_speed.SetValue(idx, (uint16_t)((SpeedCoef * packet0->RPM) >> 20), CAN_TIMER_TYPE_NORMAL);
         
         CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, packet0->Gear, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, packet0->Roll, CAN_TIMER_TYPE_NORMAL);
 
         uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
         uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);
-        uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
+		//uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
+		uint16_t avg_spd = ((spd1 + spd2) >> 1);
         uint32_t odometer_value = CANLib::obj_controller_odometer.GetTypedValue(0);
         odometer_value += avg_spd * (HAL_GetTick() - odometer_last_update) / 3600000;
         odometer_last_update = HAL_GetTick();
@@ -206,9 +213,10 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x01:
     {
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
+		uint16_t current = (packet1->Current >> 2) * 10;
         CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
-        CANLib::obj_controller_current.SetValue(idx, (packet1->Current >> 2) * 10, CAN_TIMER_TYPE_NORMAL);
-        CANLib::obj_controller_power.SetValue(idx, packet1->Voltage * (packet1->Current >> 2) * 10, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_current.SetValue(idx, current, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_power.SetValue(idx, (packet1->Voltage * current), CAN_TIMER_TYPE_NORMAL);
         break;
     }
 
