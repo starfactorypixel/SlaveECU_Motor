@@ -13,17 +13,38 @@
 #include "MotorErrors.h"
 #include "MotorPackets.h"
 
+using event_callback_t = void (*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
+using error_callback_t = void (*)(const uint8_t motor_idx, const motor_error_t code);
+using tx_callback_t = void (*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
+
+/*************************************************************************************
+ *
+ * FardriverControllerInterface: It is used for pointer operations with controllers.
+ *
+ *************************************************************************************/
+class FardriverControllerInterface
+{
+public:
+	virtual void SetEventCallback(event_callback_t callback) = 0;
+	virtual void SetErrorCallback(error_callback_t callback) = 0;
+	virtual void SetTXCallback(tx_callback_t callback) = 0;
+	virtual void RXByte(uint8_t data, uint32_t time) = 0;
+	virtual bool IsActive() = 0;
+	virtual void Processing(uint32_t time) = 0;
+};
+
+/*************************************************************************************
+ *
+ * FardriverController: implements FardriverControllerInterface.
+ *
+ *************************************************************************************/
 template <uint8_t _motor_idx = 0>
-class FardriverController
+class FardriverController : public FardriverControllerInterface
 {
 	static const uint16_t _rx_buffer_timeout = 10; // Время мс до сброса принимаемого пакета.
 	static const uint8_t _rx_buffer_size = 16;	   // Общий размер пакета.
 	static const uint16_t _request_time = 550;	   // Интервал отправки запраса данных в контроллер.
 	static const uint16_t _unactive_timeout = 500; // Время мс бездейтсвия, после которого считается что связи с контроллером нет.
-
-	using event_callback_t = void (*)(const uint8_t motor_idx, motor_packet_raw_t *packet);
-	using error_callback_t = void (*)(const uint8_t motor_idx, const motor_error_t code);
-	using tx_callback_t = void (*)(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
 
 public:
 	FardriverController()
@@ -34,7 +55,7 @@ public:
 	/*
 		Регистрирует колбек, который возвращает принятый пакет.
 	*/
-	void SetEventCallback(event_callback_t callback)
+	virtual void SetEventCallback(event_callback_t callback) override
 	{
 		_event_callback = callback;
 	}
@@ -42,7 +63,7 @@ public:
 	/*
 		Регистрирует колбек, который возвращает принятый флаг(и) ошибок.
 	*/
-	void SetErrorCallback(error_callback_t callback)
+	virtual void SetErrorCallback(error_callback_t callback) override
 	{
 		_error_callback = callback;
 	}
@@ -50,7 +71,7 @@ public:
 	/*
 		Регистрирует колбек, который отправляет данные контроллеру.
 	*/
-	void SetTXCallback(tx_callback_t callback)
+	virtual void SetTXCallback(tx_callback_t callback) override
 	{
 		_tx_callback = callback;
 	}
@@ -58,7 +79,7 @@ public:
 	/*
 		(Interrupt) Вставка принятого байта и обработка пакета.
 	*/
-	void RXByte(uint8_t data, uint32_t time)
+	virtual void RXByte(uint8_t data, uint32_t time) override
 	{
 		// Если с момента последнего байта прошло более _packet_timeout мс.
 		if (time - _rx_buffer_timeout > _rx_buffer_last_time)
@@ -83,7 +104,7 @@ public:
 	/*
 		Флаг активного соединенеия с контроллером.
 	*/
-	bool IsActive()
+	virtual bool IsActive() override
 	{
 		return _isActive;
 	}
@@ -92,7 +113,7 @@ public:
 		Обработка принытых данных.
 		Вызываться должна с интервалом, не более 30 мс!
 	*/
-	void Processing(uint32_t time)
+	virtual void Processing(uint32_t time) override
 	{
 		// Нужно ответить на запрос авторизации.
 		if (_need_init_tx == true)

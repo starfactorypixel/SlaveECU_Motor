@@ -21,41 +21,40 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <Leds.h>
 #include <CANLogic.h>
-#include "FardriverController.h"
-
-// Green LED is on while free CAN mailboxes are not available.
-// When at least one mailbox is free, LED will go off.
-#define LedGreen_ON HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET)
-#define LedGreen_OFF HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET)
+#include <MotorLogic.h>
+// #include "FardriverController.h"
 
 ADC_HandleTypeDef hadc1;
 CAN_HandleTypeDef hcan;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
-UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
-UART_HandleTypeDef huart3;
+UART_HandleTypeDef huart1; // debug log
+UART_HandleTypeDef huart2; // motor 1
+UART_HandleTypeDef huart3; // motor 2
 
 /* Private variables ---------------------------------------------------------*/
-FardriverController<1> motor1;
-FardriverController<2> motor2;
 
 // For Timers
 uint32_t Timer1 = 0;
 
+uint32_t odometer_last_update = 0;
+
 //------------------------ For UART
 #define UART_BUFFER_SIZE 128
-uint8_t receiveBuff_huart3[UART_BUFFER_SIZE];
-uint8_t receiveBuffStat_huart3[UART_BUFFER_SIZE];
-uint16_t ReciveUart3Size = 0;
-uint8_t FlagReciveUART3 = 0;
 
-uint8_t receiveBuff_huart2[UART_BUFFER_SIZE];
-uint8_t receiveBuffStat_huart2[UART_BUFFER_SIZE];
-uint16_t ReciveUart2Size = 0;
-uint8_t FlagReciveUART2 = 0;
+uint8_t huart2_rx_buff_hot[UART_BUFFER_SIZE] = {0};
+uint8_t huart2_rx_buff_cold[UART_BUFFER_SIZE] = {0};
+uint16_t huart2_bytes_received = 0;
+bool huart2_rx_flag = false;
+
+uint8_t huart3_rx_buff_hot[UART_BUFFER_SIZE] = {0};
+uint8_t huart3_rx_buff_cold[UART_BUFFER_SIZE] = {0};
+uint16_t huart3_bytes_received = 0;
+bool huart3_rx_flag = false;
+//------------------------
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -68,149 +67,47 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 
-void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
-{
-    /*
-    MotorData *motor_data = nullptr;
-    switch (motor_idx)
-    {
-    case 1:
-        motor_data = &motor_ecu_params.motor_1;
-        break;
-
-    case 2:
-        motor_data = &motor_ecu_params.motor_2;
-        break;
-
-    default:
-        return;
-    }
-
-    switch (raw_packet->_A1)
-    {
-    case 0x00:
-    {
-        motor_packet_0_t *data = (motor_packet_0_t *)raw_packet;
-        motor_data->Roll = (data->Roll & 0x03);
-        motor_data->Gear = (data->Gear & 0x03);
-        motor_data->RPM = data->RPM; // Об\м
-        // TODO: speed calculation should be optimized
-        motor_data->Speed = 60 * data->RPM * MOTOR_ECU_WHEEL_LENGTH; // 100м\ч
-        motor_data->D2 = raw_packet->D2;
-        motor_data->Errors = data->ErrorFlags;
-
-        // odometer: 100m per bit
-        uint32_t curr_time = millis();
-        if (motor_ecu_params.odometer_last_update == 0)
-        {
-            motor_ecu_params.odometer_last_update = curr_time;
-        }
-        // crazy math: odometer will use both moter data =)
-        // TODO: odometer calculation should be optimized
-        motor_ecu_params.odometer += motor_data->Speed * (curr_time - motor_ecu_params.odometer_last_update) / 3600000;
-
-        break;
-    }
-    case 0x01:
-    {
-        motor_packet_1_t *data = (motor_packet_1_t *)raw_packet;
-        motor_data->Voltage = data->Voltage; // 100мВ
-        // TODO: Ток 250мА/бит, int16
-        motor_data->Current = (data->Current >> 2) * 10;		 // 100мА
-        motor_data->Power = data->Voltage * data->Current * 100; // Вт
-
-        break;
-    }
-    case 0x04:
-    {
-        // TODO: Градусы : uint8, но до 200 градусов. Если больше то int8
-        motor_data->TController = (raw_packet->D2 <= 200) ? (uint8_t)raw_packet->D2 : (int8_t)raw_packet->D2;
-
-        break;
-    }
-    case 0x0D:
-    {
-        // TODO: Градусы : uint8, но до 200 градусов. Если больше то int8
-        motor_data->TMotor = (raw_packet->D0 <= 200) ? (uint8_t)raw_packet->D0 : (int8_t)raw_packet->D0;
-
-        break;
-    }
-    default:
-    {
-        break;
-    }
-    }
-*/
-    return;
-}
-
-void OnMotorError(const uint8_t motor_idx, const motor_error_t code)
-{
-    return;
-}
-
-void OnMotorTX(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len)
-{
-    // Serial.write(raw, raw_len);
-
-    return;
-}
-
 //-------------------------------- Прерывание от USART по заданному ранее количеству байт
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (huart == &huart2)
+    // motor 1
+    if (huart->Instance == USART2)
     {
-        // что нибудь делаем
-        HAL_UART_Receive_IT(&huart2, (uint8_t *)receiveBuff_huart2, 16); // настроить прерывание huart на прием по достижения количества 16 байт
+        huart2_bytes_received = 16;
+        memcpy(huart2_rx_buff_cold, huart2_rx_buff_hot, 16);
+        huart2_rx_flag = true;
+        HAL_UART_Receive_IT(&huart2, huart2_rx_buff_hot, 16);
     }
-    if (huart == &huart3)
+
+    // motor 2
+    if (huart->Instance == USART3)
     {
-        // что нибудь делаем
-        HAL_UART_Receive_IT(&huart3, (uint8_t *)receiveBuff_huart3, 16); // настроить прерывание huart на прием по достижения количества 16 байт
+        huart3_bytes_received = 16;
+        memcpy(huart3_rx_buff_cold, huart3_rx_buff_hot, 16);
+        huart3_rx_flag = true;
+        HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);
     }
 }
 
 //-------------------------------- Прерывание от USART по флагу Idle
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-    if (huart->Instance == USART3)
-    {
-        ReciveUart3Size = Size;
-        if (Size == 16 && receiveBuff_huart3[0] == 0x05)
-        {
-            FlagReciveUART3 = 1;
-
-            // переписать пакет в буфер для хранения
-            for (uint16_t i = 0; i != Size; i++)
-            {
-                receiveBuffStat_huart3[i] = receiveBuff_huart3[i];
-            }
-            HAL_UARTEx_ReceiveToIdle_IT(&huart3, (uint8_t *)receiveBuff_huart3, 1000); // настроить huart на прием следующего пакета
-        }
-        else
-        {
-            HAL_UARTEx_ReceiveToIdle_IT(&huart3, (uint8_t *)receiveBuff_huart3, 1000); // настроить huart на прием следующего пакета
-        }
-    }
+    // motor 1
     if (huart->Instance == USART2)
     {
-        ReciveUart2Size = Size;
-        if (Size == 16 && receiveBuff_huart2[0] == 0x05)
-        {
-            FlagReciveUART2 = 1;
+        huart2_bytes_received = Size;
+        memcpy(huart2_rx_buff_cold, huart2_rx_buff_hot, Size);
+        huart2_rx_flag = true;
+        HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE);
+    }
 
-            // переписать пакет в буфер для хранения
-            for (uint16_t i = 0; i != Size; i++)
-            {
-                receiveBuffStat_huart2[i] = receiveBuff_huart2[i];
-            }
-            HAL_UARTEx_ReceiveToIdle_IT(&huart2, (uint8_t *)receiveBuff_huart2, 200); // настроить huart на прием следующего пакета
-        }
-        else
-        {
-            HAL_UARTEx_ReceiveToIdle_IT(&huart2, (uint8_t *)receiveBuff_huart2, 200); // настроить huart на прием следующего пакета
-        }
+    // motor 2
+    if (huart->Instance == USART3)
+    {
+        huart3_bytes_received = Size;
+        memcpy(huart3_rx_buff_cold, huart3_rx_buff_hot, Size);
+        huart3_rx_flag = true;
+        HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
     }
 }
 
@@ -259,14 +156,114 @@ void HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length)
 
     while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) == 0)
     {
-        LedGreen_ON;
+        Leds::ledsObj.SetOn(Leds::ledsObj.LED_YELLOW);
     }
-    LedGreen_OFF;
+    Leds::ledsObj.SetOff(Leds::ledsObj.LED_YELLOW);
 
     if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox) != HAL_OK)
     {
         LOG("CAN TX ERROR: 0x%04lX", TxHeader.StdId);
     }
+}
+
+/// @brief Callback function: It is called when correct packet from motor controller PCB is received.
+/// @param motor_idx Index of the motor
+/// @param raw_packet Pointer to the structure with data.
+void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
+{
+    if (motor_idx > 1 || motor_idx == 0)
+        return;
+
+    uint8_t idx = motor_idx - 1;
+
+    switch (raw_packet->_A1)
+    {
+    case 0x00:
+    {
+        motor_packet_0_t *packet0 = (motor_packet_0_t *)raw_packet;
+        CANLib::obj_controller_rpm.SetValue(idx, packet0->RPM, CAN_TIMER_TYPE_NORMAL);
+
+        // TODO: Длина окружности колеса захардкожена!!
+        #warning Wheel length is a const hardcoded value!
+        // TODO: Optimization of speed calculation needed!
+        // D=0.57m, WHEEL_LENGTH=Pi*D и делим на 100 для скорости в 100м/ч
+        // при RPM >= 61019 об/мин получим переполнение
+        CANLib::obj_controller_speed.SetValue(idx, (uint16_t)(60 * packet0->RPM * 0.0179), CAN_TIMER_TYPE_NORMAL);
+        
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, packet0->Gear, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, packet0->Roll, CAN_TIMER_TYPE_NORMAL);
+
+        uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
+        uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);
+        uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
+        uint32_t odometer_value = CANLib::obj_controller_odometer.GetTypedValue(0);
+        odometer_value += avg_spd * (HAL_GetTick() - odometer_last_update) / 3600000;
+        odometer_last_update = HAL_GetTick();
+        CANLib::obj_controller_odometer.SetValue(0, odometer_value, CAN_TIMER_TYPE_NORMAL);
+        break;
+    }
+
+    case 0x01:
+    {
+        motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
+        CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_current.SetValue(idx, (packet1->Current >> 2) * 10, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_power.SetValue(idx, packet1->Voltage * (packet1->Current >> 2) * 10, CAN_TIMER_TYPE_NORMAL);
+        break;
+    }
+
+    case 0x04:
+    {
+        // Градусы : uint8, но до 200 градусов. Если больше то int8
+        CANLib::obj_controller_temperature.SetValue(2 * idx + 1, (raw_packet->D2 <= 200) ? (uint8_t)raw_packet->D2 : (int8_t)raw_packet->D2, CAN_TIMER_TYPE_NORMAL);
+        break;
+    }
+
+    case 0x0D:
+    {
+        // Градусы : uint8, но до 200 градусов. Если больше то int8
+        CANLib::obj_controller_temperature.SetValue(2 * idx, (raw_packet->D0 <= 200) ? (uint8_t)raw_packet->D0 : (int8_t)raw_packet->D0, CAN_TIMER_TYPE_NORMAL);
+        break;
+    }
+
+    default:
+        return;
+    }
+}
+
+/// @brief Callback function: It is called when motor controller reports errors
+/// @param motor_idx Index of the motor
+/// @param code Motor error code
+void OnMotorError(const uint8_t motor_idx, const motor_error_t code)
+{
+    if (motor_idx > 1 || motor_idx == 0)
+        return;
+
+    CANLib::obj_controller_errors.SetValue(motor_idx - 1, (uint16_t)code, CAN_TIMER_TYPE_NORMAL, CAN_EVENT_TYPE_NORMAL);
+}
+
+/// @brief Callback function: It is called by FardriverController classes for sending data to the PCB of motor controllers.
+/// @param motor_idx Index of the motor
+/// @param raw Pointer to the raw data buffer for sending
+/// @param raw_len Raw data length
+void OnMotorTX(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len)
+{
+    UART_HandleTypeDef *motor_huart = nullptr;
+    switch (motor_idx)
+    {
+    case 1:
+        motor_huart = &huart2;
+        break;
+
+    case 2:
+        motor_huart = &huart3;
+        break;
+
+    default:
+        return;
+    }
+
+    HAL_UART_Transmit(motor_huart, (uint8_t *)raw, raw_len, 100);
 }
 
 /// @brief Peripherals initialization: GPIO, DMA, CAN, SPI, USART, ADC, Timers
@@ -284,27 +281,19 @@ void InitPeripherals()
     HAL_TIM_Base_Start_IT(&htim1);
 };
 
-/// @brief Make all LEDs blink on startup
-void InitialLEDblinks()
-{
-    LedGreen_OFF;
-
-    LedGreen_ON;
-    HAL_Delay(500);
-    LedGreen_OFF;
-};
-
 /// @brief The application entry point.
 /// @return int
 int main()
 {
     HAL_Init();
-
-    /* Configure the system clock */
     SystemClock_Config();
-
     InitPeripherals();
-    InitialLEDblinks();
+
+    // CAN free mailbox error = Yellow LED
+    // Global Error handler (infinite loop) = Green LED
+    // unused = Red LED
+    // unused = Blue LED
+    Leds::Setup();
 
     /* активируем события которые будут вызывать прерывания  */
     HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE);
@@ -312,41 +301,32 @@ int main()
     HAL_CAN_Start(&hcan);
 
     // Настройка прерывания от uart (нужное раскоментировать)
-    //	HAL_UARTEx_ReceiveToIdle_IT(&huart3, (uint8_t*) receiveBuff_huart3, 1000);		// настроить прерывание huart на прием по флагу Idle
-    //	HAL_UART_Receive_IT(&huart3, (uint8_t*)receiveBuff_huart3, 16);	 // настроить прерывание huart на прием по достижения количества 16 байт
+    HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE); // настроить прерывание huart на прием по флагу Idle
+    HAL_UART_Receive_IT(&huart2, huart2_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
+    HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE); // настроить прерывание huart на прием по флагу Idle
+    HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
 
     CANLib::Setup();
-
-    motor1.SetEventCallback(OnMotorEvent);
-    // motor2.SetEventCallback(OnMotorEvent);
-    motor1.SetErrorCallback(OnMotorError);
-    // motor2.SetErrorCallback(OnMotorError);
-    motor1.SetTXCallback(OnMotorTX);
-    // motor2.SetTXCallback(OnMotorTX);
+    Motors::Setup();
 
     uint32_t current_time = HAL_GetTick();
     while (1)
     {
+        Leds::Loop(current_time);
         CANLib::Loop(current_time);
+        Motors::Loop(current_time);
 
-        motor1.Processing(current_time);
-        // motor2.Processing(current_time);
-
-        /*
-        while (Serial.available() > 0)
+        if (huart2_rx_flag)
         {
-            motor1.RXByte(Serial.read(), current_time);
-            // motor2.RXByte( Serial.read() , current_time);
+            Motors::ProcessBytes(1, huart2_rx_buff_cold, huart2_bytes_received, current_time);
+            huart2_rx_flag = false;
         }
-        */
 
-        motor1.IsActive();
-        // motor2.IsActive();
-
-        // HAL_UART_Transmit(&huart2, RxData, 8, 100);
-        // HAL_UART_Transmit(&huart3, RxData, 8, 100);
-        // LedGreen_ON;
-        // HAL_Delay(50);
+        if (huart3_rx_flag)
+        {
+            Motors::ProcessBytes(2, huart3_rx_buff_cold, huart3_bytes_received, current_time);
+            huart3_rx_flag = false;
+        }
     }
 }
 
@@ -635,7 +615,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void Error_Handler(void)
 {
-    /* User can add his own implementation to report the HAL error return state */
+    Leds::ledsObj.SetOn(Leds::ledsObj.LED_GREEN);
     while (1)
     {
     }
