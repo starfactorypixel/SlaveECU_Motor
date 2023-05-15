@@ -196,8 +196,10 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 		//CANLib::obj_controller_speed.SetValue(idx, (uint16_t)(60 * packet0->RPM * 0.0179), CAN_TIMER_TYPE_NORMAL);
 		CANLib::obj_controller_speed.SetValue(idx, (uint16_t)((SpeedCoef * packet0->RPM) >> 20), CAN_TIMER_TYPE_NORMAL);
         
-        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, packet0->Gear, CAN_TIMER_TYPE_NORMAL);
-        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, packet0->Roll, CAN_TIMER_TYPE_NORMAL);
+		// TODO: Добавить сюда флаги пониженной передачи и кнопки закиси азота..
+		// А пока просто фиксим значения до 2 младших бит.
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, (packet0->Gear & 0x03), CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, (packet0->Roll & 0x03), CAN_TIMER_TYPE_NORMAL);
 
         uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
         uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);

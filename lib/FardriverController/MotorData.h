@@ -33,3 +33,22 @@ struct __attribute__((__packed__)) MotorData
 
 	uint8_t D2;
 };
+
+
+enum motor_gear_t
+{
+	MOTOR_GEAR_NEUTRAL = 0x00,
+	MOTOR_GEAR_FORWARD = 0x01,
+	MOTOR_GEAR_REVERSE = 0x02,
+	MOTOR_GEAR_LOW = 0x03,
+	MOTOR_GEAR_BOOST = 0x04,
+	MOTOR_GEAR_UNKNOWN = 0x0F
+};
+
+enum motor_roll_t
+{
+	MOTOR_ROLL_STOP = 0x00,
+	MOTOR_ROLL_FORWARD = 0x01,
+	MOTOR_ROLL_REVERSE = 0x02,
+	MOTOR_ROLL_UNKNOWN = 0x0F
+};
