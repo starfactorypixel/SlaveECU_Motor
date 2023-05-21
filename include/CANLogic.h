@@ -248,6 +248,22 @@ namespace CANLib
 		*/
 		//*************************************************************
 
+		static uint32_t time = 0;
+		if(current_time - time > 500)
+		{
+			time = current_time;
+
+			uint16_t rand1 = current_time ^ current_time / 2;
+			uint16_t rand2 = current_time ^ current_time / 4;
+
+			obj_controller_voltage.SetValue(0, rand1, CAN_TIMER_TYPE_NORMAL);
+			obj_controller_voltage.SetValue(1, rand1+50, CAN_TIMER_TYPE_NORMAL);
+			obj_controller_current.SetValue(0, rand2, CAN_TIMER_TYPE_NORMAL);
+			obj_controller_current.SetValue(1, rand2-50, CAN_TIMER_TYPE_NORMAL);
+
+			Serial::Print("tick\r\n");
+		}
+
 		current_time = HAL_GetTick();
 
 		return;

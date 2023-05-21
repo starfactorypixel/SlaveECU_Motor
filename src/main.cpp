@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <SerialUtils.h>
 #include <Leds.h>
 #include <CANLogic.h>
 #include <MotorLogic.h>
@@ -316,6 +317,8 @@ int main()
     HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE); // настроить прерывание huart на прием по флагу Idle
     HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
 
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+
     CANLib::Setup();
     Motors::Setup();
 
@@ -609,6 +612,11 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_8;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
