@@ -4,30 +4,41 @@
 
 namespace Leds
 {
-	InfoLeds<4> ledsObj;
-
+	static constexpr uint8_t CFG_LedCount = 4;
+	
+	enum leds_t : uint8_t
+	{
+		LED_NONE = 0,
+		LED_RED = 1,
+		LED_YELLOW = 2,
+		LED_GREEN = 3,
+		LED_BLUE = 4,
+	};
+	
+	InfoLeds<CFG_LedCount> ledsObj;
+	
 	inline void Setup()
 	{
-		ledsObj.AddLed( {GPIOC, GPIO_PIN_14}, ledsObj.LED_RED );
-		ledsObj.AddLed( {GPIOC, GPIO_PIN_15}, ledsObj.LED_YELLOW );
-		ledsObj.AddLed( {GPIOA, GPIO_PIN_0}, ledsObj.LED_GREEN );
-		ledsObj.AddLed( {GPIOA, GPIO_PIN_1}, ledsObj.LED_BLUE );
+		ledsObj.AddLed( {GPIOC, GPIO_PIN_14}, LED_RED );
+		ledsObj.AddLed( {GPIOC, GPIO_PIN_15}, LED_YELLOW );
+		ledsObj.AddLed( {GPIOA, GPIO_PIN_0}, LED_GREEN );
+		ledsObj.AddLed( {GPIOA, GPIO_PIN_1}, LED_BLUE );
 
-		ledsObj.SetOn(ledsObj.LED_RED);
+		ledsObj.SetOn(LED_RED);
 		HAL_Delay(100);
-		ledsObj.SetOff(ledsObj.LED_RED);
+		ledsObj.SetOff(LED_RED);
 
-		ledsObj.SetOn(ledsObj.LED_YELLOW);
+		ledsObj.SetOn(LED_YELLOW);
 		HAL_Delay(100);
-		ledsObj.SetOff(ledsObj.LED_YELLOW);
+		ledsObj.SetOff(LED_YELLOW);
 
-		ledsObj.SetOn(ledsObj.LED_GREEN);
+		ledsObj.SetOn(LED_GREEN);
 		HAL_Delay(100);
-		ledsObj.SetOff(ledsObj.LED_GREEN);
+		ledsObj.SetOff(LED_GREEN);
 
-		ledsObj.SetOn(ledsObj.LED_BLUE);
+		ledsObj.SetOn(LED_BLUE);
 		HAL_Delay(100);
-		ledsObj.SetOff(ledsObj.LED_BLUE);
+		ledsObj.SetOff(LED_BLUE);
 	}
 
 	inline void Loop(uint32_t &current_time)

@@ -162,9 +162,9 @@ void HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length)
 
     while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) == 0)
     {
-        Leds::ledsObj.SetOn(Leds::ledsObj.LED_YELLOW);
+        Leds::ledsObj.SetOn(Leds::LED_YELLOW);
     }
-    Leds::ledsObj.SetOff(Leds::ledsObj.LED_YELLOW);
+    Leds::ledsObj.SetOff(Leds::LED_YELLOW);
 
     if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox) != HAL_OK)
     {
@@ -633,7 +633,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void Error_Handler(void)
 {
-    Leds::ledsObj.SetOn(Leds::ledsObj.LED_GREEN);
+    Leds::ledsObj.SetOn(Leds::LED_GREEN);
     while (1)
     {
     }
