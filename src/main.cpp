@@ -22,18 +22,18 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <SerialUtils.h>
+#include <LoggerLibrary.h>
+#include <About.h>
 #include <Leds.h>
 #include <CANLogic.h>
 #include <MotorLogic.h>
-// #include "FardriverController.h"
 
 ADC_HandleTypeDef hadc1;
 CAN_HandleTypeDef hcan;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
-UART_HandleTypeDef huart1; // debug log
+UART_HandleTypeDef hDebugUart; // debug log
 UART_HandleTypeDef huart2; // motor 1
 UART_HandleTypeDef huart3; // motor 2
 
@@ -127,7 +127,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
     {
         CANLib::can_manager.IncomingCANFrame(RxHeader.StdId, RxData, RxHeader.DLC);
-        // LOG("RX: CAN 0x%04lX", RxHeader.StdId);
+        // DEBUG_LOG("RX: CAN 0x%04lX", RxHeader.StdId);
     }
 }
 
@@ -136,7 +136,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
 {
     uint32_t er = HAL_CAN_GetError(hcan);
-    LOG("CAN ERROR: %lu %08lX", (unsigned long)er, (unsigned long)er);
+    DEBUG_LOG("CAN ERROR: %lu %08lX", (unsigned long)er, (unsigned long)er);
 }
 
 /// @brief Sends data via CAN bus
@@ -162,13 +162,13 @@ void HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length)
 
     while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan) == 0)
     {
-        Leds::ledsObj.SetOn(Leds::LED_YELLOW);
+        Leds::obj.SetOn(Leds::LED_YELLOW);
     }
-    Leds::ledsObj.SetOff(Leds::LED_YELLOW);
+    Leds::obj.SetOff(Leds::LED_YELLOW);
 
     if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox) != HAL_OK)
     {
-        LOG("CAN TX ERROR: 0x%04lX", TxHeader.StdId);
+        DEBUG_LOG("CAN TX ERROR: 0x%04lX", TxHeader.StdId);
     }
 }
 
@@ -520,15 +520,15 @@ static void MX_TIM2_Init(void)
  */
 static void MX_USART1_UART_Init(void)
 {
-    huart1.Instance = USART1;
-    huart1.Init.BaudRate = 115200;
-    huart1.Init.WordLength = UART_WORDLENGTH_8B;
-    huart1.Init.StopBits = UART_STOPBITS_1;
-    huart1.Init.Parity = UART_PARITY_NONE;
-    huart1.Init.Mode = UART_MODE_TX_RX;
-    huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-    if (HAL_UART_Init(&huart1) != HAL_OK)
+    hDebugUart.Instance = USART1;
+    hDebugUart.Init.BaudRate = 115200;
+    hDebugUart.Init.WordLength = UART_WORDLENGTH_8B;
+    hDebugUart.Init.StopBits = UART_STOPBITS_1;
+    hDebugUart.Init.Parity = UART_PARITY_NONE;
+    hDebugUart.Init.Mode = UART_MODE_TX_RX;
+    hDebugUart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    hDebugUart.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&hDebugUart) != HAL_OK)
     {
         Error_Handler();
     }
@@ -633,7 +633,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  */
 void Error_Handler(void)
 {
-    Leds::ledsObj.SetOn(Leds::LED_GREEN);
+    Leds::obj.SetOn(Leds::LED_GREEN);
     while (1)
     {
     }

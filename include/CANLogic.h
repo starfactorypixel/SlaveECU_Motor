@@ -260,8 +260,6 @@ namespace CANLib
 			obj_controller_voltage.SetValue(1, rand1+50, CAN_TIMER_TYPE_NORMAL);
 			obj_controller_current.SetValue(0, rand2, CAN_TIMER_TYPE_NORMAL);
 			obj_controller_current.SetValue(1, rand2-50, CAN_TIMER_TYPE_NORMAL);
-
-			Serial::Print("tick\r\n");
 		}
 
 		current_time = HAL_GetTick();
