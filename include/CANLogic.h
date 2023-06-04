@@ -143,10 +143,10 @@ namespace CANLib
 			iter = current_time;
 
 			uint8_t *data = (uint8_t *)&current_time;
-			obj_block_info.SetValue(3, data[0], CAN_TIMER_TYPE_NORMAL);
-			obj_block_info.SetValue(4, data[1], CAN_TIMER_TYPE_NORMAL);
-			obj_block_info.SetValue(5, data[2], CAN_TIMER_TYPE_NORMAL);
-			obj_block_info.SetValue(6, data[3], CAN_TIMER_TYPE_NORMAL);
+			obj_block_info.SetValue(2, data[0], CAN_TIMER_TYPE_NORMAL);
+			obj_block_info.SetValue(3, data[1], CAN_TIMER_TYPE_NORMAL);
+			obj_block_info.SetValue(4, data[2], CAN_TIMER_TYPE_NORMAL);
+			obj_block_info.SetValue(5, data[3], CAN_TIMER_TYPE_NORMAL);
 		}
 		
 		// TEST
