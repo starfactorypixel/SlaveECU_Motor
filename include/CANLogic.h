@@ -98,13 +98,13 @@ namespace CANLib
 
 	// 0x010B TemperatureMotor
 	// request | timer:1000
-	// int16_t	°C	1 + 1 + 1	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
+	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
 	// Температура двигателей: №1 — int16, №2 — int16
 	CANObject<int16_t, 2> obj_motor_temperature(0x010B, 1000, CAN_ERROR_DISABLED);
 
 	// 0x010B TemperatureController
 	// request | timer:1000
-	// int16_t	°C	1 + 1 + 1	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
+	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
 	// Температура контроллеров: №1 — int16, №2 — int16
 	CANObject<int16_t, 2> obj_controller_temperature(0x010C, 1000, CAN_ERROR_DISABLED);
 
@@ -162,8 +162,8 @@ namespace CANLib
 		{
 			time = current_time;
 
-			uint16_t rand1 = current_time ^ current_time / 2;
-			uint16_t rand2 = current_time ^ current_time / 4;
+			//uint16_t rand1 = current_time ^ current_time / 2;
+			//uint16_t rand2 = current_time ^ current_time / 4;
 
 			//obj_controller_voltage.SetValue(0, rand1, CAN_TIMER_TYPE_NORMAL);
 			//obj_controller_voltage.SetValue(1, rand1+50, CAN_TIMER_TYPE_NORMAL);

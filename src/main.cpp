@@ -193,7 +193,7 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         CANLib::obj_controller_rpm.SetValue(idx, packet0->RPM, CAN_TIMER_TYPE_NORMAL);
 
         // TODO: Длина окружности колеса захардкожена!!
-        #warning Wheel length is a const hardcoded value!
+        //#warning Wheel length is a const hardcoded value!
         // TODO: Optimization of speed calculation needed!
         // D=0.57m, WHEEL_LENGTH=Pi*D и делим на 100 для скорости в 100м/ч
         // при RPM >= 61019 об/мин получим переполнение
