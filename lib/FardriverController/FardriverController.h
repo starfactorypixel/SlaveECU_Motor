@@ -162,6 +162,11 @@ public:
 		}
 	}
 
+	static int16_t TempFix(uint8_t raw_temp)
+	{
+		return (raw_temp <= 200) ? (uint8_t)raw_temp : (int8_t)raw_temp;
+	}
+
 private:
 	/*
 		Проверяет принятый пакет на валидность.

@@ -52,14 +52,14 @@ uint32_t SpeedCoef = WheelLenght * 60UL;			// Коэффициент скоро�
 #define UART_BUFFER_SIZE 128
 
 uint8_t huart2_rx_buff_hot[UART_BUFFER_SIZE] = {0};
-uint8_t huart2_rx_buff_cold[UART_BUFFER_SIZE] = {0};
-uint16_t huart2_bytes_received = 0;
-bool huart2_rx_flag = false;
+//uint8_t huart2_rx_buff_cold[UART_BUFFER_SIZE] = {0};
+//uint16_t huart2_bytes_received = 0;
+//bool huart2_rx_flag = false;
 
 uint8_t huart3_rx_buff_hot[UART_BUFFER_SIZE] = {0};
-uint8_t huart3_rx_buff_cold[UART_BUFFER_SIZE] = {0};
-uint16_t huart3_bytes_received = 0;
-bool huart3_rx_flag = false;
+//uint8_t huart3_rx_buff_cold[UART_BUFFER_SIZE] = {0};
+//uint16_t huart3_bytes_received = 0;
+//bool huart3_rx_flag = false;
 //------------------------
 
 /* Private function prototypes -----------------------------------------------*/
@@ -113,31 +113,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	}
 	else if(huart->Instance == USART3)
 	{
-		Motors::RXEventProcessing(2, huart2_rx_buff_hot, Size, time);
+		Motors::RXEventProcessing(2, huart3_rx_buff_hot, Size, time);
 		HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
 	}
 
 	return;
-	
-/*
-    // motor 1
-    if (huart->Instance == USART2)
-    {
-        huart2_bytes_received = Size;
-        memcpy(huart2_rx_buff_cold, huart2_rx_buff_hot, Size);
-        huart2_rx_flag = true;
-        HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE);
-    }
-
-    // motor 2
-    if (huart->Instance == USART3)
-    {
-        huart3_bytes_received = Size;
-        memcpy(huart3_rx_buff_cold, huart3_rx_buff_hot, Size);
-        huart3_rx_flag = true;
-        HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
-    }
-*/
 }
 
 /// @brief Callback function of CAN receiver.
@@ -200,8 +180,8 @@ void HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length)
 /// @param raw_packet Pointer to the structure with data.
 void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 {
-    //if (motor_idx > 1 || motor_idx == 0)
-    //    return;
+    if (motor_idx > 2 || motor_idx == 0)
+        return;
 
     uint8_t idx = motor_idx - 1;
 
@@ -239,7 +219,7 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x01:
     {
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
-		uint16_t current = (packet1->Current >> 2) * 10;
+		int16_t current = (packet1->Current / 4) * 10;
         CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_current.SetValue(idx, current, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_power.SetValue(idx, (packet1->Voltage * current), CAN_TIMER_TYPE_NORMAL);
@@ -249,14 +229,14 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x04:
     {
         // Градусы : uint8, но до 200 градусов. Если больше то int8
-        CANLib::obj_controller_temperature.SetValue(2 * idx + 1, (raw_packet->D2 <= 200) ? (uint8_t)raw_packet->D2 : (int8_t)raw_packet->D2, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_temperature.SetValue(idx, FardriverController<>::TempFix(raw_packet->D2), CAN_TIMER_TYPE_NORMAL);
         break;
     }
 
     case 0x0D:
     {
         // Градусы : uint8, но до 200 градусов. Если больше то int8
-        CANLib::obj_controller_temperature.SetValue(2 * idx, (raw_packet->D0 <= 200) ? (uint8_t)raw_packet->D0 : (int8_t)raw_packet->D0, CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_motor_temperature.SetValue(idx, FardriverController<>::TempFix(raw_packet->D0), CAN_TIMER_TYPE_NORMAL);
         break;
     }
 
@@ -270,7 +250,7 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 /// @param code Motor error code
 void OnMotorError(const uint8_t motor_idx, const motor_error_t code)
 {
-    if (motor_idx > 1 || motor_idx == 0)
+    if (motor_idx > 2 || motor_idx == 0)
         return;
 
     CANLib::obj_controller_errors.SetValue(motor_idx - 1, (uint16_t)code, CAN_TIMER_TYPE_NORMAL, CAN_EVENT_TYPE_NORMAL);
@@ -351,22 +331,7 @@ int main()
         Leds::Loop(current_time);
         CANLib::Loop(current_time);
         Motors::Loop(current_time);
-
-/*
-        if (huart2_rx_flag)
-        {
-            Motors::ProcessBytes(1, huart2_rx_buff_cold, huart2_bytes_received, current_time);
-            huart2_rx_flag = false;
-        }
-
-        if (huart3_rx_flag)
-        {
-            Motors::ProcessBytes(2, huart3_rx_buff_cold, huart3_bytes_received, current_time);
-            huart3_rx_flag = false;
-        }
-*/
-
-    }
+	}
 }
 
 /**
@@ -547,7 +512,7 @@ static void MX_TIM2_Init(void)
 static void MX_USART1_UART_Init(void)
 {
     hDebugUart.Instance = USART1;
-    hDebugUart.Init.BaudRate = 115200;
+    hDebugUart.Init.BaudRate = 500000;
     hDebugUart.Init.WordLength = UART_WORDLENGTH_8B;
     hDebugUart.Init.StopBits = UART_STOPBITS_1;
     hDebugUart.Init.Parity = UART_PARITY_NONE;
@@ -568,7 +533,7 @@ static void MX_USART1_UART_Init(void)
 static void MX_USART2_UART_Init(void)
 {
     huart2.Instance = USART2;
-    huart2.Init.BaudRate = 115200;
+    huart2.Init.BaudRate = 19200;
     huart2.Init.WordLength = UART_WORDLENGTH_8B;
     huart2.Init.StopBits = UART_STOPBITS_1;
     huart2.Init.Parity = UART_PARITY_NONE;
@@ -589,7 +554,7 @@ static void MX_USART2_UART_Init(void)
 static void MX_USART3_UART_Init(void)
 {
     huart3.Instance = USART3;
-    huart3.Init.BaudRate = 115200;
+    huart3.Init.BaudRate = 19200;
     huart3.Init.WordLength = UART_WORDLENGTH_8B;
     huart3.Init.StopBits = UART_STOPBITS_1;
     huart3.Init.Parity = UART_PARITY_NONE;
