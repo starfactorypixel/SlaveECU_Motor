@@ -20,7 +20,9 @@ namespace Motors
         motor2.SetErrorCallback(OnMotorError);
         motor1.SetTXCallback(OnMotorTX);
         motor2.SetTXCallback(OnMotorTX);
-    }
+		
+		return;
+	}
 
     inline void Loop(uint32_t &current_time)
     {
@@ -30,6 +32,7 @@ namespace Motors
         current_time = HAL_GetTick();
     }
 
+	/*
     inline void ProcessBytes(const uint8_t motor_idx, uint8_t *data, uint16_t data_length, uint32_t &current_time)
     {
         FardriverControllerInterface *motor = nullptr;
@@ -52,4 +55,32 @@ namespace Motors
             motor->RXByte(data[i], current_time);
         }
     }
+	*/
+
+	inline void RXEventProcessing(uint8_t idx, uint8_t *hot_buffer, uint8_t length, uint32_t &time)
+	{
+		switch(idx)
+		{
+			case 1:
+			{
+				for(uint16_t i = 0; i < length; i++)
+				{
+					motor1.RXByte(hot_buffer[i], time);
+				}
+				
+				break;
+			}
+			case 2:
+			{
+				for(uint16_t i = 0; i < length; i++)
+				{
+					motor2.RXByte(hot_buffer[i], time);
+				}
+				
+				break;
+			}
+		}
+
+		return;
+	}
 }

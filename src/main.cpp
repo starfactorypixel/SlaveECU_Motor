@@ -73,6 +73,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 
+/*
 //-------------------------------- Прерывание от USART по заданному ранее количеству байт
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
@@ -94,10 +95,31 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);
     }
 }
+*/
 
 //-------------------------------- Прерывание от USART по флагу Idle
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
+	uint32_t time = HAL_GetTick();
+	
+	if(huart->Instance == USART1)
+	{
+
+	}
+	else if(huart->Instance == USART2)
+	{
+		Motors::RXEventProcessing(1, huart2_rx_buff_hot, Size, time);
+		HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE);
+	}
+	else if(huart->Instance == USART3)
+	{
+		Motors::RXEventProcessing(2, huart2_rx_buff_hot, Size, time);
+		HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
+	}
+
+	return;
+	
+/*
     // motor 1
     if (huart->Instance == USART2)
     {
@@ -115,6 +137,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
         huart3_rx_flag = true;
         HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
     }
+*/
 }
 
 /// @brief Callback function of CAN receiver.
@@ -177,8 +200,8 @@ void HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length)
 /// @param raw_packet Pointer to the structure with data.
 void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 {
-    if (motor_idx > 1 || motor_idx == 0)
-        return;
+    //if (motor_idx > 1 || motor_idx == 0)
+    //    return;
 
     uint8_t idx = motor_idx - 1;
 
@@ -313,9 +336,9 @@ int main()
 
     // Настройка прерывания от uart (нужное раскоментировать)
     HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE); // настроить прерывание huart на прием по флагу Idle
-    HAL_UART_Receive_IT(&huart2, huart2_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
+    //HAL_UART_Receive_IT(&huart2, huart2_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
     HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE); // настроить прерывание huart на прием по флагу Idle
-    HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
+    //HAL_UART_Receive_IT(&huart3, huart3_rx_buff_hot, 16);                       // настроить прерывание huart на прием по достижения количества 16 байт
 
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
 
@@ -329,6 +352,7 @@ int main()
         CANLib::Loop(current_time);
         Motors::Loop(current_time);
 
+/*
         if (huart2_rx_flag)
         {
             Motors::ProcessBytes(1, huart2_rx_buff_cold, huart2_bytes_received, current_time);
@@ -340,6 +364,8 @@ int main()
             Motors::ProcessBytes(2, huart3_rx_buff_cold, huart3_bytes_received, current_time);
             huart3_rx_flag = false;
         }
+*/
+
     }
 }
 
