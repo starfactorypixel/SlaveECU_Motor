@@ -31,7 +31,7 @@ namespace CANLib
 	// request | timer:15000
 	// 1 + X { type[0] data[1..7] }
 	// Основная информация о блоке. См. "Системные параметры".
-	CANObject<uint8_t, 7> obj_block_info(0x0100, 15000, CAN_ERROR_DISABLED);
+	CANObject<uint8_t, 7> obj_block_info(0x0100, 15000, CAN_ERROR_DISABLED, true);
 
 	// 0x0101 BlockHealth
 	// request | event Link
