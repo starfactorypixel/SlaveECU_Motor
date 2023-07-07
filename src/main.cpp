@@ -233,6 +233,8 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, (packet0->Gear & 0x03), CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, (packet0->Roll & 0x03), CAN_TIMER_TYPE_NORMAL);
 
+		DEBUG_LOG_TOPIC("GearRoll", "Motor: %d, Gear: %02X, Roll: %02X;\r\n", motor_idx, packet0->Gear, packet0->Roll);
+
         uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
         uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);
 		//uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
@@ -247,10 +249,11 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x01:
     {
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
-		
-		int16_t current = (packet1->Current / 4) * 10;
-        int16_t power = ((int32_t)packet1->Current * (uint32_t)packet1->Voltage) / 40;
-		
+        
+        int16_t current = (packet1->Current / 4) * 10;
+        int16_t power = ((int32_t)abs(packet1->Current) * (uint32_t)packet1->Voltage) / 40;
+        if(packet1->Current < 0) power = -power;
+        
 		CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_current.SetValue(idx, current, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_power.SetValue(idx, power, CAN_TIMER_TYPE_NORMAL);
