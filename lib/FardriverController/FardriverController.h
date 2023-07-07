@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "MotorData.h"
 #include "MotorErrors.h"
 #include "MotorPackets.h"
 
@@ -162,11 +163,40 @@ public:
 		}
 	}
 
-	static int16_t TempFix(uint8_t raw_temp)
+
+
+	static inline int16_t FixTemp(uint8_t raw_temp)
 	{
 		return (raw_temp <= 200) ? (uint8_t)raw_temp : (int8_t)raw_temp;
 	}
 
+	static inline uint8_t FixGear(uint8_t raw_gear)
+	{
+		// 01 - Передняя
+		// 0С - Нейтраль
+		// 0E - Задняя
+		
+		return (raw_gear & 0x03);
+	}
+
+	static inline uint8_t FixRoll(uint8_t raw_roll)
+	{
+		uint8_t result = MOTOR_ROLL_UNKNOWN;
+		
+		// 00 - Стоп
+		// 01 - Назад
+		// 03 - Вперёд
+		
+		switch(raw_roll)
+		{
+			case 0x00: { result = MOTOR_ROLL_STOP; break; }
+			case 0x01: { result = MOTOR_ROLL_REVERSE; break; }
+			case 0x03: { result = MOTOR_ROLL_FORWARD; break; }
+		}
+		
+		return result;
+	}
+	
 private:
 	/*
 		Проверяет принятый пакет на валидность.

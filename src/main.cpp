@@ -230,8 +230,8 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         
 		// TODO: Добавить сюда флаги пониженной передачи и кнопки закиси азота..
 		// А пока просто фиксим значения до 2 младших бит.
-        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, (packet0->Gear & 0x03), CAN_TIMER_TYPE_NORMAL);
-        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, (packet0->Roll & 0x03), CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx, FardriverController<>::FixGear(packet0->Gear), CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_gear_n_roll.SetValue(2 * idx + 1, FardriverController<>::FixRoll(packet0->Roll), CAN_TIMER_TYPE_NORMAL);
 
 		DEBUG_LOG_TOPIC("GearRoll", "Motor: %d, Gear: %02X, Roll: %02X;\r\n", motor_idx, packet0->Gear, packet0->Roll);
 
@@ -251,7 +251,7 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
         
         int16_t current = (packet1->Current / 4) * 10;
-        int16_t power = ((int32_t)abs(packet1->Current) * (uint32_t)packet1->Voltage) / 40;
+        int16_t power = ((uint32_t)abs(packet1->Current) * (uint32_t)packet1->Voltage) / 40;
         if(packet1->Current < 0) power = -power;
         
 		CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
@@ -264,14 +264,14 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x04:
     {
         // Градусы : uint8, но до 200 градусов. Если больше то int8
-        CANLib::obj_controller_temperature.SetValue(idx, FardriverController<>::TempFix(raw_packet->D2), CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_controller_temperature.SetValue(idx, FardriverController<>::FixTemp(raw_packet->D2), CAN_TIMER_TYPE_NORMAL);
         break;
     }
 
     case 0x0D:
     {
         // Градусы : uint8, но до 200 градусов. Если больше то int8
-        CANLib::obj_motor_temperature.SetValue(idx, FardriverController<>::TempFix(raw_packet->D0), CAN_TIMER_TYPE_NORMAL);
+        CANLib::obj_motor_temperature.SetValue(idx, FardriverController<>::FixTemp(raw_packet->D0), CAN_TIMER_TYPE_NORMAL);
         break;
     }
 
