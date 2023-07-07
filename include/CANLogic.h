@@ -98,13 +98,13 @@ namespace CANLib
 
 	// 0x010B TemperatureMotor
 	// request | timer:1000
-	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
+	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1..2] mt2[3..4] }
 	// Температура двигателей: №1 — int16, №2 — int16
 	CANObject<int16_t, 2> obj_motor_temperature(0x010B, 1000, CAN_ERROR_DISABLED);
 
 	// 0x010B TemperatureController
 	// request | timer:1000
-	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1] ct1[2] mt2[3] ct2[4] }
+	// int16_t	°C	1 + 2 + 2	{ type[0] ct1[1..2] ct2[3..4] }
 	// Температура контроллеров: №1 — int16, №2 — int16
 	CANObject<int16_t, 2> obj_controller_temperature(0x010C, 1000, CAN_ERROR_DISABLED);
 

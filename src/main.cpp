@@ -44,9 +44,10 @@ uint32_t Timer1 = 0;
 
 uint32_t odometer_last_update = 0;
 
-uint16_t WheelRadius = 2850;						// Радиус колеса, 100u.
+// Hardcoded speed calc.
+uint32_t WheelRadius = 340;					// Радиус колеса, мм.
 uint32_t WheelLenght = (2UL * M_PI * WheelRadius) + 0.5;	// Длина колеса, мм.
-uint32_t SpeedCoef = WheelLenght * 60UL;			// Коэффициент скорости, просто добавить RPM и сдвинь на 20 вправо.
+uint32_t SpeedCoef = WheelLenght * 60UL;	// Коэффициент скорости, просто добавить RPM и поделить на 100000.
 
 //------------------------ For UART
 #define UART_BUFFER_SIZE 128
@@ -106,12 +107,14 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	{
 
 	}
-	else if(huart->Instance == USART2)
+
+	if(huart->Instance == USART2)
 	{
 		Motors::RXEventProcessing(1, huart2_rx_buff_hot, Size, time);
 		HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE);
 	}
-	else if(huart->Instance == USART3)
+
+	if(huart->Instance == USART3)
 	{
 		Motors::RXEventProcessing(2, huart3_rx_buff_hot, Size, time);
 		HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
@@ -119,6 +122,31 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 
 	return;
 }
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    if(huart->Instance == USART2)
+    {
+        DEBUG_LOG_TOPIC("uart2", "ERR: %d\r\n", huart->ErrorCode);
+
+        HAL_UART_AbortReceive_IT(&huart2);
+        HAL_UARTEx_ReceiveToIdle_IT(&huart2, huart2_rx_buff_hot, UART_BUFFER_SIZE);
+    }
+
+    if(huart->Instance == USART3)
+    {
+        DEBUG_LOG_TOPIC("uart3", "ERR: %d\r\n", huart->ErrorCode);
+
+        HAL_UART_AbortReceive_IT(&huart3);
+        HAL_UARTEx_ReceiveToIdle_IT(&huart3, huart3_rx_buff_hot, UART_BUFFER_SIZE);
+    }
+
+   // __HAL_USART_CLEAR_FEFLAG(huart);
+
+    
+    
+}
+
 
 /// @brief Callback function of CAN receiver.
 /// @param hcan Pointer to the structure that contains CAN configuration.
@@ -198,7 +226,7 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
         // D=0.57m, WHEEL_LENGTH=Pi*D и делим на 100 для скорости в 100м/ч
         // при RPM >= 61019 об/мин получим переполнение
 		//CANLib::obj_controller_speed.SetValue(idx, (uint16_t)(60 * packet0->RPM * 0.0179), CAN_TIMER_TYPE_NORMAL);
-		CANLib::obj_controller_speed.SetValue(idx, (uint16_t)((SpeedCoef * packet0->RPM) >> 20), CAN_TIMER_TYPE_NORMAL);
+		CANLib::obj_controller_speed.SetValue(idx, (uint16_t)((SpeedCoef * packet0->RPM) / 100000UL), CAN_TIMER_TYPE_NORMAL);
         
 		// TODO: Добавить сюда флаги пониженной передачи и кнопки закиси азота..
 		// А пока просто фиксим значения до 2 младших бит.
@@ -219,11 +247,15 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x01:
     {
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
+		
 		int16_t current = (packet1->Current / 4) * 10;
-        CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
+        int16_t power = ((int32_t)packet1->Current * (uint32_t)packet1->Voltage) / 40;
+		
+		CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
         CANLib::obj_controller_current.SetValue(idx, current, CAN_TIMER_TYPE_NORMAL);
-        CANLib::obj_controller_power.SetValue(idx, (packet1->Voltage * current), CAN_TIMER_TYPE_NORMAL);
-        break;
+        CANLib::obj_controller_power.SetValue(idx, power, CAN_TIMER_TYPE_NORMAL);
+        
+		break;
     }
 
     case 0x04:
