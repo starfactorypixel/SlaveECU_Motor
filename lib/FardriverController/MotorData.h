@@ -27,9 +27,12 @@ struct __attribute__((__packed__)) MotorData
 	// 0x010A	Gear+Roll
 	uint8_t Gear;
 	uint8_t Roll;
-	// 0x010B	Temperature
-	int8_t TMotor;
-	int8_t TController;
+	// 0x010B	TemperatureMotor
+	int16_t TMotor;
+	// 0x010C	TemperatureController
+	int16_t TController;
+	// 0x010D	Odometer
+	uint32_t Odometer;
 
 	uint8_t D2;
 };
