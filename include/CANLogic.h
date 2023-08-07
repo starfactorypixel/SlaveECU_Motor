@@ -31,25 +31,25 @@ namespace CANLib
 	// request | timer:15000
 	// 1 + X { type[0] data[1..7] }
 	// Основная информация о блоке. См. "Системные параметры".
-	CANObject<uint8_t, 7> obj_block_info(0x0100, 15000, CAN_ERROR_DISABLED, true);
+	CANObject<uint8_t, 7> obj_block_info(0x0100);
 
 	// 0x0101 BlockHealth
 	// request | event Link
 	// 1 + X { type[0] data[1..7] }
 	// Информация о здоровье блока. См. "Системные параметры".
-	CANObject<uint8_t, 7> obj_block_health(0x0101, CAN_TIMER_DISABLED, 300);
+	CANObject<uint8_t, 7> obj_block_health(0x0101);
 
 	// 0x0102 BlockCfg
 	// request Link
 	// 1 + X { type[0] data[1..7] }
 	// Чтение и запись настроек блока. См. "Системные параметры".
-	CANObject<uint8_t, 7> obj_block_cfg(0x0102, CAN_TIMER_DISABLED, CAN_ERROR_DISABLED);
+	CANObject<uint8_t, 7> obj_block_features(0x0102);
 
 	// 0x0103 BlockError
 	// request | event Link
 	// 1 + X { type[0] data[1..7] }
 	// Ошибки блока. См. "Системные параметры".
-	CANObject<uint8_t, 7> obj_block_error(0x0103, CAN_TIMER_DISABLED, 300);
+	CANObject<uint8_t, 7> obj_block_error(0x0103);
 
 	//*********************************************************************
 	// CAN Blocks: specific blocks
@@ -117,9 +117,14 @@ namespace CANLib
 	
 	inline void Setup()
 	{
+		set_block_info_params(obj_block_info);
+		set_block_health_params(obj_block_health);
+		set_block_features_params(obj_block_features);
+		set_block_error_params(obj_block_error);
+		
 		can_manager.RegisterObject(obj_block_info);
 		can_manager.RegisterObject(obj_block_health);
-		can_manager.RegisterObject(obj_block_cfg);
+		can_manager.RegisterObject(obj_block_features);
 		can_manager.RegisterObject(obj_block_error);
 		can_manager.RegisterObject(obj_controller_errors);
 		can_manager.RegisterObject(obj_controller_rpm);
@@ -149,7 +154,7 @@ namespace CANLib
 		{
 			iter = current_time;
 
-			uint8_t *data = (uint8_t *)&current_time;
+			uint8_t *data = (uint8_t *) &current_time;
 			obj_block_info.SetValue(2, data[0], CAN_TIMER_TYPE_NORMAL);
 			obj_block_info.SetValue(3, data[1], CAN_TIMER_TYPE_NORMAL);
 			obj_block_info.SetValue(4, data[2], CAN_TIMER_TYPE_NORMAL);

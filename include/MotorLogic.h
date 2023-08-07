@@ -5,6 +5,7 @@
 
 void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet);
 void OnMotorError(const uint8_t motor_idx, const motor_error_t code);
+void OnMotorHWError(const uint8_t motor_idx, const uint8_t code);
 void OnMotorTX(const uint8_t motor_idx, const uint8_t *raw, const uint8_t raw_len);
 
 namespace Motors
@@ -14,11 +15,16 @@ namespace Motors
 
     inline void Setup()
     {
-        motor1.SetEventCallback(OnMotorEvent);
-        motor2.SetEventCallback(OnMotorEvent);
-        motor1.SetErrorCallback(OnMotorError);
-        motor2.SetErrorCallback(OnMotorError);
-        motor1.SetTXCallback(OnMotorTX);
+        motor1.SetEventDataCallback(OnMotorEvent);
+        motor2.SetEventDataCallback(OnMotorEvent);
+        
+		motor1.SetEventErrorCallback(OnMotorError);
+        motor2.SetEventErrorCallback(OnMotorError);
+
+		motor1.SetErrorCallback(OnMotorHWError);
+		motor2.SetErrorCallback(OnMotorHWError);
+        
+		motor1.SetTXCallback(OnMotorTX);
         motor2.SetTXCallback(OnMotorTX);
 		
 		return;
