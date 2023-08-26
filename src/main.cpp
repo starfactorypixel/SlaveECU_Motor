@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <ConstantLibrary.h>
 #include <LoggerLibrary.h>
 #include <About.h>
 #include <Leds.h>

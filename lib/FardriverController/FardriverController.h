@@ -178,16 +178,18 @@ public:
 		// Время последнего байта больше _unactive_timeout.
 		if (time - _rx_buffer_last_time > _unactive_timeout)
 		{
-			//_isActive = false;
-			//_error = ERROR_LOST;
+			_isActive = false;
+			_error = ERROR_LOST;
 		}
 		
-		if(_error != ERROR_NONE)
+		if(_error != ERROR_NONE && _error != _error_send)
 		{
 			if(_error_callback != nullptr)
 			{
 				_error_callback(_motor_idx, _error);
 			}
+			
+			_error_send = _error;
 		}
 		
 		return;
@@ -309,6 +311,7 @@ private:
 	bool _isActive;
 
 	error_t _error = ERROR_NONE;
+	error_t _error_send = ERROR_NONE;
 
 	// enum state_t : uint8_t {STATE_IDLE, STATE_AUTH, STATE_WORK, STATE_LOST} _state = STATE_IDLE;
 };
