@@ -30,7 +30,7 @@ class FardriverCRC
 		*/
 		bool CheckTX_old(uint8_t *data)
 		{
-			uint8_t crc = GetCRC8_old(data);
+			uint8_t crc = GetCRC_old(data, 6);
 			
 			return (data[0] == ((~crc) & 0xFF) && data[1] == crc);
 		}
@@ -40,7 +40,7 @@ class FardriverCRC
 		*/
 		bool CheckTX_new(uint8_t *data)
 		{
-			uint8_t crc = GetCRC8_new(data);
+			uint8_t crc = GetCRC_new(data, 6);
 			
 			return (data[6] == crc && data[7] == ((~crc) & 0xFF));
 		}
@@ -52,7 +52,7 @@ class FardriverCRC
 		*/
 		bool CheckRX_old(uint8_t *data)
 		{
-			uint16_t crc = GetCRC16_old(data);
+			uint16_t crc = GetCRC_old(data, 14);
 			
 			return (data[0] == (crc & 0xFF) && data[1] == ((crc >> 8) & 0xFF));
 		}
@@ -62,7 +62,7 @@ class FardriverCRC
 		*/
 		bool CheckRX_new(uint8_t *data)
 		{
-			uint16_t crc = GetCRC16_new(data);
+			uint16_t crc = GetCRC_new(data, 14);
 			
 			return (data[14] == (crc & 0xFF) && data[15] == ((crc >> 8) & 0xFF));
 		}
@@ -75,7 +75,7 @@ class FardriverCRC
 		*/
 		void PutTX_old(uint8_t *data)
 		{
-			uint8_t crc = GetCRC8_old(data);
+			uint8_t crc = GetCRC_old(data, 6);
 			data[0] = ~crc;
 			data[1] = crc;
 			
@@ -87,7 +87,7 @@ class FardriverCRC
 		*/
 		void PutTX_new(uint8_t *data)
 		{
-			uint8_t crc = GetCRC8_new(data);
+			uint8_t crc = GetCRC_new(data, 6);
 			data[6] = crc;
 			data[7] = ~crc;
 			
@@ -101,7 +101,7 @@ class FardriverCRC
 		*/
 		void PutRX_old(uint8_t *data)
 		{
-			uint16_t crc = GetCRC16_old(data);
+			uint16_t crc = GetCRC_old(data, 14);
 			data[0] = (crc & 0xFF);
 			data[1] = ((crc >> 8) & 0xFF);
 			
@@ -113,59 +113,24 @@ class FardriverCRC
 		*/
 		void PutRX_new(uint8_t *data)
 		{
-			uint16_t crc = GetCRC16_new(data);
+			uint16_t crc = GetCRC_new(data, 14);
 			data[14] = (crc & 0xFF);
 			data[15] = ((crc >> 8) & 0xFF);
 			
 			return;
 		}
 		
-		
 		/*
-			Расчёт CRC8 для старых контроллеров.
-			Параметры: Алгебраическая сумма байт
-			
-			! Буфер данных должен быть инверсный !
-		*/
-		uint8_t GetCRC8_old(uint8_t *buffer)
-		{
-			uint8_t crc = 0x00;
-			
-			for(uint8_t i = 2; i < 8; ++i)
-			{
-				crc += buffer[i];
-			}
-			
-			return crc;
-		}
-		
-		/*
-			Расчёт CRC8 для новых контроллеров.
-			Параметры: Алгебраическая сумма байт
-		*/
-		uint8_t GetCRC8_new(uint8_t *buffer)
-		{
-			uint8_t crc = 0x00;
-			
-			for(uint8_t i = 0; i < 6; ++i)
-			{
-				crc += buffer[i];
-			}
-			
-			return crc;
-		}
-		
-		/*
-			Расчёт CRC16 для старых контроллеров.
+			Расчёт CRC8 и CRC16 для старых контроллеров.
 			Параметры: Алгебраическая сумма байт
 
 			! Буфер данных должен быть инверсный !
 		*/
-		uint16_t GetCRC16_old(uint8_t *buffer)
+		uint16_t GetCRC_old(uint8_t *buffer, uint8_t length)
 		{
 			uint16_t crc = 0x0000;
 			
-			for(uint8_t idx = 2; idx < 16; ++idx)
+			for(uint8_t idx = 2; idx < (length + 2); ++idx)
 			{
 				crc += buffer[idx];
 			}
@@ -174,14 +139,14 @@ class FardriverCRC
 		}
 		
 		/*
-			Расчёт CRC16 для новых контроллеров.
+			Расчёт CRC8 и CRC16 для новых контроллеров.
 			Параметры: Poly: 0x8005, Init: 0x7F3C, RefIn: true, RefOut: true, XorOut: false
 		*/
-		uint16_t GetCRC16_new(uint8_t *buffer)
+		uint16_t GetCRC_new(uint8_t *buffer, uint8_t length)
 		{
 			uint16_t crc = 0x7F3C;
 			
-			for(uint8_t idx = 0; idx < 14; ++idx)
+			for(uint8_t idx = 0; idx < length; ++idx)
 			{
 				crc ^= (uint16_t)buffer[idx];
 				for(uint8_t i = 8; i != 0; --i)
