@@ -12,22 +12,24 @@ inline void swap_endian(uint16_t &val)
 struct motor_data_t
 {
     uint32_t time; // время последнего обновления данных. TODO: а оно нам надо?
-    uint8_t voltage;
+    uint16_t voltage;
     int16_t current;
     int16_t temperature;
     // и т.п.
 };
 
-using time_function_t = uint32_t (*)();
+using tx_callback_t = void (*)(const uint8_t motor_idx, const uint8_t *buffer, uint8_t const length);
 
 /*********************************************************************************************************
  *********************************************************************************************************/
 class MotorManagerInterface
 {
 public:
-    virtual void RXEvent(uint8_t idx, uint8_t *buffer, uint8_t length) = 0;
-    virtual void TXEvent(uint8_t idx, uint8_t *buffer, uint8_t length) = 0;
+    virtual void RXEvent(uint8_t motor_idx, uint8_t *buffer, uint8_t length) = 0;
+    virtual void TXEvent(uint8_t motor_idx, const uint8_t *buffer, uint8_t length) = 0;
     virtual void Processing(uint32_t time) = 0;
+    virtual void DeleteNFirstBytesFromBuffer(uint8_t motor_idx, uint8_t number_of_bytes) = 0;
+    virtual motor_data_t *GetMotorData(uint8_t motor_idx) = 0;
 };
 
 /*********************************************************************************************************
@@ -35,51 +37,17 @@ public:
 class MotorParserInterface
 {
 public:
-    enum parser_state_code_t : uint8_t
-    {
-        STATE_ERROR = 0x00,
-        STATE_DISCONNECTED = 0x01,
-        STATE_PAIRING = 0x02,
-        STATE_CONNECTED_PARSING = 0x03,
-        STATE_CONNECTED_PERIODIC = 0x04,
-
-        STATE_IGNORE = 0xFF, // используем, если не хотим менять базовое поведение машины состояний
-    };
-
-    struct parser_state_t
-    {
-        uint32_t enter_time;
-        parser_state_code_t state_code;
-    };
-
-    MotorParserInterface() = delete;
-
-    MotorParserInterface(time_function_t time_func, MotorManagerInterface &manager, motor_data_t &motor_data)
-    {
-        _current_state.state_code = STATE_DISCONNECTED;
-        _current_state.enter_time = 0;
-
-        SetTimeFunction(time_func);
-        SetManager(manager);
-        SetMotorData(motor_data);
-    }
-
     virtual ~MotorParserInterface() = default;
 
-    void SetTimeFunction(time_function_t time_func)
+    void SetNextParser(MotorParserInterface *parser)
     {
-        _time_func = time_func;
-    }
+        _next_parser = parser;
+    };
 
-    void SetManager(MotorManagerInterface &manager)
+    bool HasNextParser()
     {
-        _manager = &manager;
-    }
-
-    void SetMotorData(motor_data_t &motor_data)
-    {
-        _motor_data = &motor_data;
-    }
+        return _next_parser != nullptr;
+    };
 
     // Проверка данных на валидность (AT+ команда или пакет, 0xAA, старший бит второго байта, CRC)
     bool IsValidHandshakeOrPacket(uint8_t *buffer, uint8_t length)
@@ -97,7 +65,7 @@ public:
 
     bool IsValidPacket(uint8_t *buffer, uint8_t length)
     {
-        if (buffer == nullptr)
+        if (buffer == nullptr || length == 0)
             return false;
 
         return _HasValidPacket(buffer, length);
@@ -105,7 +73,7 @@ public:
 
     /// @brief ищет первое вхождение валидного пакета или хендшейка в буфере
     /// @param buffer буфер для поиска
-    /// @param length длина данных ф буфере
+    /// @param length длина данных в буфере
     /// @param offset [OUT] переменная, в которой в случае успешности поиска будет храниться смещение начала пакета в буфере
     /// @return 'true' в случае, если пакет найден
     ///         'false', если пакет в буфере отсутствует
@@ -123,265 +91,87 @@ public:
         return false;
     }
 
-    parser_state_t GetCurrentState() { return _current_state; };
-    parser_state_code_t GetCurrentStateCode() { return _current_state.state_code; };
-    uint32_t GetCurrentStateTime() { return _current_state.enter_time; };
+    /// @brief Вызывается, если получен корректный хендшейк
+    /// @param manager Переданный по ссылке менеджер моторов
+    /// @param motor_idx Индекс мотора, с которым работаем
+    /// @param buffer буфер с хендшейком
+    /// @param length длина данных в буфере
+    virtual void OnHandshakeReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) = 0;
 
-    /// @brief Выполняет всю основную работу
-    /// @param time Время вызова в мсек
-    /// @param motor_data Структура распарсенных данных по мотору. Заполняется, если есть пакет.
-    /// @param buffer Указатель на буфер с сырыми данными из UART
-    /// @param length Длина данных в буфере
-    /// @return Возвращает число обработанных байт в буфере (менеджер сможет их удалить).
-    uint8_t Process(uint8_t *buffer = nullptr, uint8_t length = 0)
+    /// @brief Вызывается, если получен корректный пакет.
+    /// @param manager Переданный по ссылке менеджер моторов
+    /// @param motor_idx Индекс мотора, с которым работаем
+    /// @param buffer буфер с хендшейком
+    /// @param length длина данных в буфере
+    virtual void OnPacketReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) = 0;
+
+    MotorParserInterface *ParsePacket(MotorManagerInterface &manager, uint8_t motor_idx, motor_data_t &motor_data, uint8_t *buffer, uint8_t length)
     {
-        uint8_t bytes_processed = 0;
+        uint8_t number_of_bytes_to_delete = 0;
 
-        switch (_current_state.state_code)
+        // если в начале буфера есть валидный хендшейк или пакет, то:
+        //     - разбираем пакет и заполняем структуру с данными по мотору
+        //     - информируем менеджера, сколько байт из буфера обработано и их можно удалить
+        //     - если нужно, с помощью менеджера отправляем в УАРТ ответы и/или запросы
+        if (IsValidHandshakeOrPacket(buffer, length))
         {
-        case STATE_DISCONNECTED:
-        {
-            _SetState(_OnStateDisconnectedBaseHandler(buffer, length));
-            break;
-        };
-        case STATE_PAIRING:
-        {
-            _SetState(_OnStatePairingBaseHandler(buffer, length));
-            break;
-        };
-
-        case STATE_CONNECTED_PARSING:
-        {
-            if (IsValidPacket(buffer, length))
+            if (IsValidHandshake(buffer, length))
             {
-                // стейт не меняем, обрабатываем пакет
-                bytes_processed = _ParsePacket(buffer, length);
-                // увеличиваем счетчик пакетов, если их надо считать
-                if (_parsing_to_periodic_packet_limit > 0 && _processed_packets_count < UINT8_MAX)
-                    _processed_packets_count++;
+                // отрабатываем, что нужно в этом случае по протоколу
+                OnHandshakeReceived(manager, motor_idx, buffer, length);
+                // и сообщаем менеджеру, что хендшейк из буфера можно удалять
+                manager.DeleteNFirstBytesFromBuffer(motor_idx, _GetHandshakeRequestLength());
             }
-            _SetState(_OnStateConnectedParsingBaseHandler(buffer, length));
-            break;
-        };
-
-        case STATE_CONNECTED_PERIODIC:
+            else // packet received
+            {
+                // отрабатываем, что нужно в этом случае по протоколу
+                OnPacketReceived(manager, motor_idx, buffer, length);
+                // парсим данные
+                number_of_bytes_to_delete = _ParsePacket(motor_data, buffer, length);
+                // и сообщаем менеджеру, что распарсенный пакет можно удалять из буфера
+                manager.DeleteNFirstBytesFromBuffer(motor_idx, number_of_bytes_to_delete);
+            }
+            return this;
+        }
+        // если получается найти валидный хендшейк/пакет не с начала буфера, то
+        // все лишние данные в буфере помечаем на удаление
+        // пакет/хендшейк распарсим на следующей итерации
+        // +1, -1 и ++ потому, что начальную позицию в буфере уже проверили, не надо на неё тратить время
+        else if (FindValidPacketOffset(buffer + 1, length - 1, ++number_of_bytes_to_delete))
         {
-            _SetState(_OnStateConnectedPeriodicBaseHandler(buffer, length));
-            break;
-        };
-
-        case STATE_IGNORE:
+            manager.DeleteNFirstBytesFromBuffer(motor_idx, number_of_bytes_to_delete);
+            return this;
+        }
+        // если есть последующий парсер, то пытаемся распарсить пакет с его помощью
+        else if (HasNextParser())
         {
-            break;
+            return _next_parser->ParsePacket(manager, motor_idx, motor_data, buffer, length);
         }
 
-        case STATE_ERROR:
-        default:
-        {
-            _SetState(_OnStateErrorBaseHandler(buffer, length));
-            break;
-        };
-        }
+        // ничего не получилось, уходим, обнуляя указатель на последний использованный парсер.
+        // Очищать данные в буфере не надо, так как в нем может просто лежать неполный пакет.
+        // Немного странновато, что при неполном пакете текущий парсер у мотора будет сбрасываться
+        // и выбор парсера после последующего получения всех данных пакета будет происходить с нуля.
+        // Но может и пофиг на это. Затраты не большие, а профита много.
+        return nullptr;
+    };
 
-        // если есть, что отправить, отправляем
-        if (_tx_buffer_data_size > 0)
-        {
-            _manager->TXEvent(_motor_index, _tx_buffer, _tx_buffer_data_size);
-            memset(_tx_buffer, 0, _tx_buffer_data_size);
-            _tx_buffer_data_size = 0;
-        }
+    /// @brief Удаляет все последующие парсеры в цепочке
+    void DeleteNextParser()
+    {
+        if (!HasNextParser())
+            return;
 
-        return bytes_processed;
+        _next_parser->DeleteNextParser();
+        delete _next_parser;
+        _next_parser = nullptr;
     };
 
 protected:
-    static constexpr uint8_t _tx_buffer_max_length = 32;
-    uint8_t _tx_buffer[_tx_buffer_max_length] = {0};
-    uint8_t _tx_buffer_data_size = 0;
-
-    uint8_t _motor_index = 0;
-
-    // параметры ниже сделаны не константами, чтобы в парсерах-потомках можно было их менять
-    uint8_t _disconnected_to_error_limit = 30;        // после этого количества попадений в состояние дисконнекта перейдем в состояние ошибки; если 0, то отключен
-    uint32_t _pairing_to_disconnected_timeout = 3000; // ms, таймаут ожидания пакетов после ответа на хендшейк
-    uint32_t _parsing_to_periodic_timeout = 550;      // ms, таймаут перехода из Connected.Parsing в Connected.Periodic; если 0, то отключен
-    uint8_t _parsing_to_periodic_packet_limit = 0;    // число пакетов, после которого выполняется переход из Connected.Parsing в Connected.Periodic; если 0, то отключен
-
-    parser_state_t _current_state;
-    uint8_t _state_disconnected_reached_count = 0; // сколько раз свалились в состояние дисконнекта
-    uint8_t _processed_packets_count = 0;          // сколько пакетов обработали
-
-    time_function_t _time_func = nullptr;
-    MotorManagerInterface *_manager = nullptr;
-    motor_data_t *_motor_data = nullptr;
-
-    void _SetState(parser_state_code_t state_code)
-    {
-        // обработка только при действительной смене состояния
-        if (_current_state.state_code == state_code || state_code == STATE_IGNORE)
-            return;
-
-        switch (state_code)
-        {
-        case STATE_DISCONNECTED:
-        {
-            // увеличиваем счетчик обрывов коннекта
-            if (_disconnected_to_error_limit != 0 && _state_disconnected_reached_count < UINT8_MAX)
-                _state_disconnected_reached_count++;
-
-            break;
-        }
-
-        case STATE_ERROR:
-        {
-            _state_disconnected_reached_count = 0;
-            break;
-        }
-
-        case STATE_PAIRING:
-        {
-            _tx_buffer_data_size += _FillHandshakeResponse(_tx_buffer, _tx_buffer_max_length - _tx_buffer_data_size);
-            break;
-        }
-
-        case STATE_CONNECTED_PARSING:
-        {
-            break;
-        }
-
-        case STATE_CONNECTED_PERIODIC:
-        {
-            _tx_buffer_data_size += _FillPacketRequest(_tx_buffer, _tx_buffer_max_length - _tx_buffer_data_size);
-            _processed_packets_count = 0;
-            break;
-        }
-
-        case STATE_IGNORE:
-        default:
-            break;
-        }
-
-        _current_state.enter_time = _time_func();
-        _current_state.state_code = state_code;
-    }
-
-    parser_state_code_t _OnStateDisconnectedBaseHandler(uint8_t *buffer, uint8_t length)
-    {
-        parser_state_code_t result = _OnStateDisconnected(buffer, length);
-        if (result != STATE_IGNORE)
-            return result;
-
-        if (IsValidHandshake(buffer, length))
-        {
-            result = STATE_PAIRING;
-        }
-        else if (IsValidPacket(buffer, length))
-        {
-            result = STATE_CONNECTED_PARSING;
-        }
-        else if (_state_disconnected_reached_count >= _disconnected_to_error_limit)
-        {
-            result = STATE_ERROR;
-        }
-
-        return result;
-    }
-
-    // виртуальный обработчик для переопределения в классах-потомках
-    virtual parser_state_code_t _OnStateDisconnected(uint8_t *buffer, uint8_t length) { return STATE_IGNORE; };
-
-    parser_state_code_t _OnStatePairingBaseHandler(uint8_t *buffer, uint8_t length)
-    {
-        parser_state_code_t result = _OnStatePairing(buffer, length);
-        if (result != STATE_IGNORE)
-            return result;
-
-        if (IsValidPacket(buffer, length))
-        {
-            result = STATE_CONNECTED_PARSING;
-        }
-        else if (buffer != nullptr && length > 0 && !IsValidHandshakeOrPacket(buffer, length))
-        { // TODO: возможно, проверка тут на инвалидность данных будет ломать процесс, если буфер стартует с обрубка пакета
-            result = STATE_DISCONNECTED;
-        }
-        else if (_time_func() - _current_state.enter_time >= _pairing_to_disconnected_timeout)
-        {
-            result = STATE_DISCONNECTED;
-        }
-
-        return result;
-    }
-
-    // виртуальный обработчик для переопределения в классах-потомках
-    virtual parser_state_code_t _OnStatePairing(uint8_t *buffer, uint8_t length) { return STATE_IGNORE; };
-
-    parser_state_code_t _OnStateConnectedParsingBaseHandler(uint8_t *buffer, uint8_t length)
-    {
-        parser_state_code_t result = _OnStateConnectedParsing(buffer, length);
-        if (result != STATE_IGNORE)
-            return result;
-
-        if (IsValidPacket(buffer, length))
-        {
-            // обработчик в методе Process
-        }
-        else if (IsValidHandshake(buffer, length))
-        {
-            result = STATE_DISCONNECTED;
-        }
-        else if (buffer != nullptr && length > 0 && !IsValidHandshakeOrPacket(buffer, length))
-        {
-            result = STATE_DISCONNECTED;
-        }
-
-        if (_parsing_to_periodic_packet_limit > 0 && _processed_packets_count >= _parsing_to_periodic_packet_limit)
-        {
-            result = STATE_CONNECTED_PERIODIC;
-        }
-        else if (_parsing_to_periodic_timeout > 0 && (_time_func() - _current_state.enter_time >= _parsing_to_periodic_timeout))
-        {
-            result = STATE_CONNECTED_PERIODIC;
-        }
-
-        return result;
-    }
-
-    // виртуальный обработчик для переопределения в классах-потомках
-    virtual parser_state_code_t _OnStateConnectedParsing(uint8_t *buffer, uint8_t length) { return STATE_IGNORE; };
-
-    parser_state_code_t _OnStateConnectedPeriodicBaseHandler(uint8_t *buffer, uint8_t length)
-    {
-        parser_state_code_t result = _OnStateConnectedPeriodic(buffer, length);
-        if (result != STATE_IGNORE)
-            return result;
-
-        return result;
-    }
-
-    // виртуальный обработчик для переопределения в классах-потомках
-    virtual parser_state_code_t _OnStateConnectedPeriodic(uint8_t *buffer, uint8_t length) { return STATE_IGNORE; };
-
-    parser_state_code_t _OnStateErrorBaseHandler(uint8_t *buffer, uint8_t length)
-    {
-        // TODO: сделать тут информирование об ошибке, если надо
-
-        parser_state_code_t result = _OnStateError(buffer, length);
-        if (result != STATE_IGNORE)
-            return result;
-
-        // по дефолту из состояния ошибки должны выпадать в состояние "нет коннекта"
-        return STATE_DISCONNECTED;
-    }
-
-    // виртуальный обработчик для переопределения в классах-потомках
-    virtual parser_state_code_t _OnStateError(uint8_t *buffer, uint8_t length) { return STATE_IGNORE; };
+    MotorParserInterface *_next_parser = nullptr;
 
     // проверяет наличие правильного хендшейка в буфере (смотрит с 1 позиции буфера, весь буфер не просматривает)
     virtual bool _HasValidHandshake(uint8_t *buffer, uint8_t length) = 0;
-
-    // возвращает длину записанного в буфер ответа на хендшейк
-    // если 0, значит ответа нет (отвечать не надо)
-    virtual uint8_t _FillHandshakeResponse(uint8_t *response_buffer, uint8_t response_buffer_max_length) = 0;
 
     // проверяет наличие правильной стартовой последовательности пакета в начале буфера
     virtual bool _HasValidPacketStart(uint8_t *buffer, uint8_t length) = 0;
@@ -389,16 +179,55 @@ protected:
     // проверяет наличие корректного пакета в буфере (стартовый байт, контрольная сумма, длина и т.п.)
     virtual bool _HasValidPacket(uint8_t *buffer, uint8_t length) = 0;
 
-    // возвращает длину записанного в буфер запроса пакетов с данными
-    // если 0, значит запроса нет (ничего запрашивать не надо)
-    virtual uint8_t _FillPacketRequest(uint8_t *request_buffer, uint8_t request_buffer_max_length) = 0;
+    /// @brief Возвращает указатель на ожидаемый запрос хендшейка от драйвера
+    /// @return Указатель на буфер, содержащий запрос хендшейка, или nullptr, если запроса нет
+    virtual const uint8_t *_GetHandshakeRequest()
+    {
+        return nullptr;
+    };
+
+    /// @brief Возвращает длину в байтах ожидаемого от драйвера запроса хендшейка
+    /// @return Количество байт в запросе хендшейка или '0', если ответа нет
+    virtual uint8_t _GetHandshakeRequestLength()
+    {
+        return 0;
+    };
+
+    /// @brief Возвращает указатель на ответ на хендшейк
+    /// @return Указатель на буфер, содержащий ответ на хендшейк, или nullptr, если ответа нет
+    virtual const uint8_t *_GetHandshakeResponse()
+    {
+        return nullptr;
+    };
+
+    /// @brief Возвращает длину в байтах ответа на хендшейк
+    /// @return Количество байт в ответе на хендшейк или '0', если ответа нет
+    virtual uint8_t _GetHandshakeResponseLength()
+    {
+        return 0;
+    };
+
+    /// @brief Возвращает указатель на запрос пакетов с данными
+    /// @return Указатель на буфер, содержащий запрос пакетов с данными, или nullptr, если запроса нет
+    virtual const uint8_t *_GetPacketRequest()
+    {
+        return nullptr;
+    };
+
+    /// @brief Возвращает длину в байтах запроса пакетов с данными
+    /// @return Количество байт в запросе данных или '0', если запроса нет
+    virtual uint8_t _GetPacketRequestLength()
+    {
+        return 0;
+    };
 
     /// @brief Разбирает пакет с начала буфера, заполняя данные в структуру мотора
+    /// @param motor_data [OUT] Structure with a parsed motor data
     /// @param buffer Буфер с пакетом
     /// @param length Длина данных в буфере
     /// @return число байт — длина обработанного пакета, даже если из него никакие данные извлечены не были (но он был валидный).
     ///         '0' — если обработка не удалась (пакет не валидный или в буфере не пакет вовсе).
-    virtual uint8_t _ParsePacket(uint8_t *buffer, uint8_t length) = 0;
+    virtual uint8_t _ParsePacket(motor_data_t &motor_data, uint8_t *buffer, uint8_t length) = 0;
 };
 
 /*********************************************************************************************************
@@ -408,10 +237,28 @@ protected:
 class FardriverParser2022 : public MotorParserInterface
 {
 public:
-    FardriverParser2022(time_function_t time_func, MotorManagerInterface &manager, motor_data_t &motor_data) : MotorParserInterface(time_func, manager, motor_data){};
+    virtual void OnHandshakeReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) override
+    {
+        // отправляем ответ на хендшейк
+        manager.TXEvent(motor_idx, _handshake_response, sizeof(_handshake_response));
+        // сразу же отправляем запрос на данные
+        manager.TXEvent(motor_idx, _packet_request, sizeof(_packet_request));
+    };
+
+    virtual void OnPacketReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) override
+    {
+        // Запрос данных в этой версии протокола отправляется примерно каждые 18-19 полученных пакетов.
+        // Поэтому делаю запрос после пакета 0x0C и 0x15, то есть запросы будут отправлены после 18 и 20 пакетов соответственно.
+        // Не думаю, что это проблема
+        if (buffer == nullptr || length == 0)
+            return;
+
+        if (buffer[1] == 0x0C || buffer[1] == 0x15)
+            manager.TXEvent(motor_idx, _packet_request, sizeof(_packet_request));
+    };
 
 private:
-    static constexpr uint8_t _handshake_start_bytes_count = 3;
+    // static constexpr uint8_t _handshake_start_bytes_count = 3;
     static constexpr uint8_t _handshake_request[] = {'A', 'T', '+', 'P', 'A', 'S', 'S', '=', '2', '9', '6', '8', '8', '7', '8', '1'};
 
     static constexpr uint8_t _handshake_response[] = {'+', 'P', 'A', 'S', 'S', '=', 'O', 'N', 'N', 'D', 'O', 'N', 'K', 'E'};
@@ -428,17 +275,6 @@ protected:
             return false;
 
         return (memcmp(buffer, _handshake_request, sizeof(_handshake_request)) == 0);
-    };
-
-    // возвращает длину записанного ответа на хендшейк
-    virtual uint8_t _FillHandshakeResponse(uint8_t *response_buffer, uint8_t response_buffer_max_length) override
-    {
-        if (response_buffer == nullptr || response_buffer_max_length < sizeof(_handshake_response))
-            return 0;
-
-        memcpy(response_buffer, _handshake_response, sizeof(_handshake_response));
-
-        return sizeof(_handshake_response);
     };
 
     virtual bool _HasValidPacketStart(uint8_t *buffer, uint8_t length) override
@@ -459,15 +295,33 @@ protected:
                _IsCRCCorrect(buffer, length);
     };
 
-    // возвращает длину записанного в буфер запроса пакетов с данными
-    // если 0, значит запроса нет (ничего запрашивать не надо)
-    uint8_t _FillPacketRequest(uint8_t *request_buffer, uint8_t request_buffer_max_length) override
+    virtual const uint8_t *_GetHandshakeRequest()
     {
-        if (request_buffer == nullptr || request_buffer_max_length < sizeof(_packet_request))
-            return 0;
+        return _handshake_request;
+    };
 
-        memcpy(request_buffer, _packet_request, sizeof(_packet_request));
+    virtual uint8_t _GetHandshakeRequestLength()
+    {
+        return sizeof(_handshake_request);
+    };
 
+    virtual const uint8_t *_GetHandshakeResponse() override
+    {
+        return _handshake_response;
+    };
+
+    virtual uint8_t _GetHandshakeResponseLength() override
+    {
+        return sizeof(_handshake_response);
+    };
+
+    virtual const uint8_t *_GetPacketRequest() override
+    {
+        return _packet_request;
+    };
+
+    virtual uint8_t _GetPacketRequestLength() override
+    {
         return sizeof(_packet_request);
     };
 
@@ -476,9 +330,24 @@ protected:
     /// @param length Длина данных в буфере
     /// @return число байт — длина обработанного пакета, даже если из него никакие данные извлечены не были (но он был валидный).
     ///         '0' — если обработка не удалась (пакет не валидный или в буфере не пакет вовсе).
-    virtual uint8_t _ParsePacket(uint8_t *buffer, uint8_t length) override
+    virtual uint8_t _ParsePacket(motor_data_t &motor_data, uint8_t *buffer, uint8_t length) override
     {
-        return 0;
+        if (!IsValidPacket(buffer, length))
+            return 0;
+
+        // TODO: сделать тут разбор пакетов для протокола 2022 года!
+        switch (buffer[1])
+        {
+        case 0x01:
+            motor_data.voltage = *(uint16_t *)&buffer[2];
+            motor_data.current = *(uint16_t *)&buffer[4];
+            break;
+
+        default:
+            break;
+        }
+
+        return _packet_length;
     };
 
     // В этой версии контрольная сумма - просто алгебраическая сумма байт
@@ -499,9 +368,22 @@ protected:
         // теперь указатель смотрит на 2 последних байта в пакете (CRC)
         buffer += _packet_length - 2;
 
-        swap_endian(*(uint16_t *)buffer);
+        // swap endian
+        union bit16_data
+        {
+            uint16_t u16;
+            struct
+            {
+                uint8_t low;
+                uint8_t high;
+            } bytes;
+        };
+        bit16_data data16;
+        data16.bytes.low = buffer[1];
+        data16.bytes.high = buffer[0];
 
-        return crc == *(uint16_t *)buffer;
+        // return crc == *(uint16_t *)buffer;
+        return crc == data16.u16;
     };
 };
 
@@ -510,10 +392,26 @@ protected:
 class FardriverParser2023 : public MotorParserInterface
 {
 public:
-    FardriverParser2023(time_function_t time_func, MotorManagerInterface &manager, motor_data_t &motor_data) : MotorParserInterface(time_func, manager, motor_data){};
+    /// @brief Вызывается, если получен корректный хендшейк
+    /// @param manager Переданный по ссылке менеджер моторов
+    /// @param motor_idx Индекс мотора, с которым работаем
+    virtual void OnHandshakeReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) override
+    {
+        // отправляем ответ на хендшейк
+        manager.TXEvent(motor_idx, _handshake_response, sizeof(_handshake_response));
+    };
+
+    /// @brief Вызывается, если получен корректный пакет.
+    /// @param manager Переданный по ссылке менеджер моторов
+    /// @param motor_idx Индекс мотора, с которым работаем
+    virtual void OnPacketReceived(MotorManagerInterface &manager, uint8_t motor_idx, uint8_t *buffer, uint8_t length) override
+    {
+        // запрос данных не требуется
+        return;
+    };
 
 private:
-    static constexpr uint8_t _handshake_start_bytes_count = 3;
+    // static constexpr uint8_t _handshake_start_bytes_count = 3;
     static constexpr uint8_t _handshake_request[] = {'A', 'T', '+', 'V', 'E', 'R', 'S', 'I', 'O', 'N'};
 
     static constexpr uint8_t _handshake_response[] = {0xAA, 0x13, 0xEC, 0x07, 0x01, 0xF1, 0xA2, 0x5D};
@@ -528,17 +426,6 @@ protected:
             return false;
 
         return (memcmp(buffer, _handshake_request, sizeof(_handshake_request)) == 0);
-    };
-
-    // возвращает длину записанного ответа на хендшейк
-    virtual uint8_t _FillHandshakeResponse(uint8_t *response_buffer, uint8_t response_buffer_max_length) override
-    {
-        if (response_buffer == nullptr || response_buffer_max_length < sizeof(_handshake_response))
-            return 0;
-
-        memcpy(response_buffer, _handshake_response, sizeof(_handshake_response));
-
-        return sizeof(_handshake_response);
     };
 
     virtual bool _HasValidPacketStart(uint8_t *buffer, uint8_t length) override
@@ -559,11 +446,32 @@ protected:
                _IsCRCCorrect(buffer, length);
     };
 
-    // возвращает длину записанного в буфер запроса пакетов с данными
-    // если 0, значит запроса нет (ничего запрашивать не надо)
-    uint8_t _FillPacketRequest(uint8_t *request_buffer, uint8_t request_buffer_max_length) override
+    /// @brief Возвращает указатель на ожидаемый запрос хендшейка от драйвера
+    /// @return Указатель на буфер, содержащий запрос хендшейка, или nullptr, если запроса нет
+    virtual const uint8_t *_GetHandshakeRequest()
     {
-        return 0;
+        return _handshake_request;
+    };
+
+    /// @brief Возвращает длину в байтах ожидаемого от драйвера запроса хендшейка
+    /// @return Количество байт в запросе хендшейка или '0', если ответа нет
+    virtual uint8_t _GetHandshakeRequestLength()
+    {
+        return sizeof(_handshake_request);
+    };
+
+    /// @brief Возвращает указатель на ответ на хендшейк
+    /// @return Указатель на буфер, содержащий ответ на хендшейк, или nullptr, если ответа нет
+    virtual const uint8_t *_GetHandshakeResponse() override
+    {
+        return _handshake_response;
+    };
+
+    /// @brief Возвращает длину в байтах ответа на хендшейк
+    /// @return Количество байт в ответе на хендшейк или '0', если ответа нет
+    virtual uint8_t _GetHandshakeResponseLength() override
+    {
+        return sizeof(_handshake_response);
     };
 
     /// @brief Разбирает пакет с начала буфера, заполняя данные в структуру мотора
@@ -571,9 +479,24 @@ protected:
     /// @param length Длина данных в буфере
     /// @return число байт — длина обработанного пакета, даже если из него никакие данные извлечены не были (но он был валидный).
     ///         '0' — если обработка не удалась (пакет не валидный или в буфере не пакет вовсе).
-    virtual uint8_t _ParsePacket(uint8_t *buffer, uint8_t length) override
+    virtual uint8_t _ParsePacket(motor_data_t &motor_data, uint8_t *buffer, uint8_t length) override
     {
-        return 0;
+        if (!IsValidPacket(buffer, length))
+            return 0;
+
+        // TODO: сделать тут разбор пакетов для протокола 2022 года!
+        switch (buffer[1])
+        {
+        case 0xA4:
+            motor_data.voltage = *(uint16_t *)&buffer[2];
+            motor_data.current = *(uint16_t *)&buffer[4];
+            break;
+
+        default:
+            break;
+        }
+
+        return _packet_length;
     };
 
     // В этой версии контрольная сумма - это CRC16 (Poly: 0x8005, Init: 0x7F3C, RefIn: true, RefOut: true, XorOut: false)
@@ -614,91 +537,15 @@ protected:
  *********************************************************************************************************/
 class MotorManager : public MotorManagerInterface
 {
-    static constexpr uint8_t _max_motors = 2;
-    static constexpr uint8_t _parsers_count = 2;
-    using tx_callback_t = void (*)(const uint8_t idx, const uint8_t *buffer, uint8_t const length);
-
-public:
-    MotorManager(tx_callback_t tx_callback)
-    {
-        _tx_callback = tx_callback;
-        for (uint8_t i = 0; i < _max_motors; i++)
-        {
-            // init motors array
-        }
-
-        for (uint8_t i = 0; i < _parsers_count; i++)
-        {
-            _parsers[i] = nullptr;
-        }
-
-        _parsers[0] = new FardriverParser2022(millis, *this, _motors[0].motor_data);
-        _parsers[1] = new FardriverParser2023(millis, *this, _motors[1].motor_data);
-    }
-
-    ~MotorManager()
-    {
-        for (uint8_t i = 0; i < _parsers_count; i++)
-        {
-            if (_parsers[i] != nullptr)
-                delete _parsers[i];
-        }
-    };
-
-    virtual void RXEvent(uint8_t idx, uint8_t *buffer, uint8_t length) override
-    {
-        if (idx >= _max_motors)
-            return;
-
-        memcpy(_motors[idx].rx_buffer, buffer, length);
-        _motors[idx].rx_data_size = length;
-    }
-
-    virtual void TXEvent(uint8_t idx, uint8_t *buffer, uint8_t length) override
-    {
-        if (_tx_callback != nullptr)
-        {
-            _tx_callback(idx, buffer, length);
-        }
-    }
-
-    virtual void Processing(uint32_t time) override
-    {
-        for (motor_t &motor : _motors)
-        {
-            // если данные получены...
-            if (motor.rx_data_size > 0)
-            {
-                // если при этом драйвер не выбран или он в состоянии дисконнекта...
-                if (motor.parser == nullptr)
-                {
-                    // ...значит надо выбирать драйвер
-                    _SelectDriver(motor);
-
-                    // если драйвер так и не выбран, значит ни одному из драйверов данные не подошли
-                    // следовательно данные надо забыть
-                    // будем ждать, пока в первой позиции принятой пачки байт не будет валидный хендшейк или пакет
-                    if (motor.parser == nullptr)
-                    {
-                        motor.rx_data_size = 0;
-                    }
-                }
-
-                // если драйвер выбран...
-                if (motor.parser != nullptr)
-                {
-                    // ...значит надо данные обработать
-                }
-            }
-        }
-    }
-
 private:
+    static constexpr uint8_t _max_motors = 2;
+    static constexpr uint8_t _rx_buffer_size = 128;
+
     typedef struct
     {
-        uint8_t motor_idx;     // индекс мотора
-        uint8_t rx_buffer[32]; // Приёмный буфер
-        uint8_t rx_data_size;  // Длина данных в буфере
+        uint8_t motor_idx;                  // индекс мотора
+        uint8_t rx_buffer[_rx_buffer_size]; // Приёмный буфер
+        uint8_t rx_data_size;               // Длина данных в буфере, данные всегда начинаются с начала буфера
 
         MotorParserInterface *parser;
 
@@ -707,36 +554,105 @@ private:
 
     motor_t _motors[_max_motors];
 
-    MotorParserInterface *_parsers[_parsers_count];
+    MotorParserInterface *_first_parser = nullptr;
 
     tx_callback_t _tx_callback = nullptr;
+    uint32_t _last_time = 0;
 
-    // определяемся, какой драйвер должен обрабатывать данные с мотора
-    void _SelectDriver(motor_t &motor)
+public:
+    MotorManager(tx_callback_t tx_callback)
     {
-        /*
-        // если драйвер уже выбран и у него всё хорошо со статусом, то нам тут делать нечего
-        if (motor.parser != nullptr && motor.parser_state == MotorParserInterface::STATE_CONNECTED)
-            // хотя... мы же ничего не поломаем, если при выбранном драйвере выберем его повторно...
+        _tx_callback = tx_callback;
+        for (uint8_t i = 0; i < _max_motors; i++)
+        {
+            _motors[i].motor_idx = i;
+            _motors[i].parser = nullptr;
+            memset(_motors[i].rx_buffer, 0, _rx_buffer_size);
+            _motors[i].rx_data_size = 0;
+            memset(&_motors[i].motor_data, 0, sizeof(motor_data_t));
+        }
+
+        _first_parser = new FardriverParser2023;
+        _first_parser->SetNextParser(new FardriverParser2022);
+    }
+
+    ~MotorManager()
+    {
+        _first_parser->DeleteNextParser();
+        delete _first_parser;
+
+        for (motor_t &motor : _motors)
+        {
+            motor.parser = nullptr;
+        }
+    };
+
+    virtual void RXEvent(uint8_t motor_idx, uint8_t *buffer, uint8_t length) override
+    {
+        if (motor_idx >= _max_motors)
             return;
 
-        // пробуем старый драйвер
-        if (_parser_2022.IsValidPacket(motor.rx_buffer, motor.rx_data_size))
-        {
-            // если подошел, то сохраняем указатель на него
-            motor.parser = (MotorParserInterface *)&_parser_2022;
-            return; // подошел
-        }
-
-        // старый драйвер не подходит, пробуем новый
-        if (_parser_2023.IsValidPacket(motor.rx_buffer, motor.rx_data_size))
-        {
-            motor.parser = (MotorParserInterface *)&_parser_2023;
-            return; // подошел
-        }
-        */
-
-        // новый тоже не подошел, печаль
-        return;
+        memcpy(_motors[motor_idx].rx_buffer, buffer, length);
+        _motors[motor_idx].rx_data_size = length;
     }
+
+    virtual void TXEvent(uint8_t motor_idx, const uint8_t *buffer, uint8_t length) override
+    {
+        if (motor_idx >= _max_motors || _tx_callback == nullptr)
+            return;
+
+        _tx_callback(motor_idx, buffer, length);
+    }
+
+    virtual void Processing(uint32_t time) override
+    {
+        if (time - _last_time <= 1)
+            return;
+
+        _last_time = time;
+
+        for (motor_t &motor : _motors)
+        {
+            if (motor.rx_data_size == 0)
+                continue;
+
+            // если данные ждут разбора...
+            if (motor.parser == nullptr)
+            {
+                // последний успешно использованный парсер отсутствует, пробуем разбор начиная с первого в цепочке
+                motor.parser = _first_parser->ParsePacket(*this, motor.motor_idx, motor.motor_data, motor.rx_buffer, motor.rx_data_size);
+            }
+            else
+            {
+                // есть последний успешно использованный парсер, пробуем использовать его для разбора
+                motor.parser = motor.parser->ParsePacket(*this, motor.motor_idx, motor.motor_data, motor.rx_buffer, motor.rx_data_size);
+            }
+        }
+    }
+
+    virtual void DeleteNFirstBytesFromBuffer(uint8_t motor_idx, uint8_t number_of_bytes) override
+    {
+        if (number_of_bytes == 0)
+            return;
+
+        if (number_of_bytes > _rx_buffer_size)
+            number_of_bytes = _rx_buffer_size;
+
+        if (number_of_bytes == _rx_buffer_size || number_of_bytes >= _motors[motor_idx].rx_data_size)
+        {
+            _motors[motor_idx].rx_data_size = 0;
+            return;
+        }
+
+        _motors[motor_idx].rx_data_size = _motors[motor_idx].rx_data_size - number_of_bytes;
+        memmove(_motors[motor_idx].rx_buffer, _motors[motor_idx].rx_buffer + number_of_bytes, _motors[motor_idx].rx_data_size);
+    };
+
+    virtual motor_data_t *GetMotorData(uint8_t motor_idx) override
+    {
+        if (motor_idx >= _max_motors)
+            return nullptr;
+
+        return &_motors[motor_idx].motor_data;
+    };
 };
