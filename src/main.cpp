@@ -236,11 +236,11 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 
 		DEBUG_LOG_TOPIC("GearRoll", "Motor: %d, Gear: %02X, Roll: %02X;\r\n", motor_idx, packet0->Gear, packet0->Roll);
 
-        uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
-        uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);
+        uint16_t spd1 = CANLib::obj_controller_speed.GetValue(0);
+        uint16_t spd2 = CANLib::obj_controller_speed.GetValue(1);
 		//uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
 		uint16_t avg_spd = ((spd1 + spd2) >> 1);
-        uint32_t odometer_value = CANLib::obj_controller_odometer.GetTypedValue(0);
+        uint32_t odometer_value = CANLib::obj_controller_odometer.GetValue(0);
         odometer_value += avg_spd * (HAL_GetTick() - odometer_last_update) / 3600000;
         odometer_last_update = HAL_GetTick();
         CANLib::obj_controller_odometer.SetValue(0, odometer_value, CAN_TIMER_TYPE_NORMAL);
