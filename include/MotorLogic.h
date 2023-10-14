@@ -33,10 +33,13 @@ namespace Motors
     inline void Loop(uint32_t &current_time)
     {
         motor1.Processing(current_time);
-        motor2.Processing(current_time);
-
-        current_time = HAL_GetTick();
-    }
+		current_time = HAL_GetTick();
+		
+		motor2.Processing(current_time);
+		current_time = HAL_GetTick();
+		
+		return;
+	}
 
 	/*
     inline void ProcessBytes(const uint8_t motor_idx, uint8_t *data, uint16_t data_length, uint32_t &current_time)

@@ -101,8 +101,10 @@ public:
 	*/
 	virtual void RXByte(uint8_t data, uint32_t time) override
 	{
+		if(lock_interrupt == true) return;
+		
 		// Если с момента последнего байта прошло более _packet_timeout мс.
-		if (time - _rx_buffer_timeout > _rx_buffer_last_time)
+		if (time - _rx_buffer_last_time > _rx_buffer_timeout)
 		{
 			_ClearBuff();
 		}
@@ -135,6 +137,11 @@ public:
 	*/
 	virtual void Processing(uint32_t time) override
 	{
+		if(time - _last_processing_time < 2) return;
+		_last_processing_time = time;
+		
+		lock_interrupt = true;
+
 		// Нужно ответить на запрос авторизации.
 		if (_need_init_tx == true)
 		{
@@ -180,9 +187,14 @@ public:
 		{
 			_isActive = false;
 			_error = ERROR_LOST;
+			
+			/*
+			if(_motor_idx == 2)
+				DEBUG_LOG_TOPIC("MOTOR", "time: %lu, last: %lu, diff: %lu\n", time, _rx_buffer_last_time, (time - _rx_buffer_last_time));
+			*/
 		}
 		
-		if(_error != ERROR_NONE && _error != _error_send)
+		if(/*_error != ERROR_NONE && */_error != _error_send)
 		{
 			if(_error_callback != nullptr)
 			{
@@ -191,6 +203,8 @@ public:
 			
 			_error_send = _error;
 		}
+
+		lock_interrupt = false;
 		
 		return;
 	}
@@ -312,6 +326,9 @@ private:
 
 	error_t _error = ERROR_NONE;
 	error_t _error_send = ERROR_NONE;
+
+	bool lock_interrupt = false;
+	uint32_t _last_processing_time = 0;
 
 	// enum state_t : uint8_t {STATE_IDLE, STATE_AUTH, STATE_WORK, STATE_LOST} _state = STATE_IDLE;
 };
