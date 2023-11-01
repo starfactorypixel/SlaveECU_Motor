@@ -299,6 +299,7 @@ void OnMotorHWError(const uint8_t motor_idx, const uint8_t code)
 	uint8_t value_old = CANLib::obj_block_health.GetValue(6);
 	uint8_t value_new = (motor_idx == 2) ? ((code << 4) | (value_old & 0x0F)) : (code | (value_old & 0xF0));
 	CANLib::obj_block_health.SetValue(6, value_new, CAN_TIMER_TYPE_NONE, CAN_EVENT_TYPE_NORMAL);
+	#warning Move to BlockError ???
 	
 	return;
 }
