@@ -108,7 +108,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	{
 
 	}
-
+	
 	if(huart->Instance == USART2)
 	{
 		Motors::RXEventProcessing(1, huart2_rx_buff_hot, Size, time);
@@ -236,11 +236,11 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
 
 		DEBUG_LOG_TOPIC("GearRoll", "Motor: %d, Gear: %02X, Roll: %02X;\r\n", motor_idx, packet0->Gear, packet0->Roll);
 
-        uint16_t spd1 = CANLib::obj_controller_speed.GetTypedValue(0);
-        uint16_t spd2 = CANLib::obj_controller_speed.GetTypedValue(1);
+        uint16_t spd1 = CANLib::obj_controller_speed.GetValue(0);
+        uint16_t spd2 = CANLib::obj_controller_speed.GetValue(1);
 		//uint16_t avg_spd = (spd1 & spd2) + ((spd1 ^ spd2) >> 1);
 		uint16_t avg_spd = ((spd1 + spd2) >> 1);
-        uint32_t odometer_value = CANLib::obj_controller_odometer.GetTypedValue(0);
+        uint32_t odometer_value = CANLib::obj_controller_odometer.GetValue(0);
         odometer_value += avg_spd * (HAL_GetTick() - odometer_last_update) / 3600000;
         odometer_last_update = HAL_GetTick();
         CANLib::obj_controller_odometer.SetValue(0, odometer_value, CAN_TIMER_TYPE_NORMAL);
@@ -296,6 +296,10 @@ void OnMotorHWError(const uint8_t motor_idx, const uint8_t code)
 {
 	DEBUG_LOG_TOPIC("MotorErr", "motor: %d, code: %d\r", motor_idx, code);
 
+	uint8_t value_old = CANLib::obj_block_health.GetValue(6);
+	uint8_t value_new = (motor_idx == 2) ? ((code << 4) | (value_old & 0x0F)) : (code | (value_old & 0xF0));
+	CANLib::obj_block_health.SetValue(6, value_new, CAN_TIMER_TYPE_NONE, CAN_EVENT_TYPE_NORMAL);
+	
 	return;
 }
 
