@@ -46,9 +46,9 @@ uint32_t Timer1 = 0;
 uint32_t odometer_last_update = 0;
 
 // Hardcoded speed calc.
-uint32_t WheelRadius = 340;					// Радиус колеса, мм.
-uint32_t WheelLenght = (2UL * M_PI * WheelRadius) + 0.5;	// Длина колеса, мм.
-uint32_t SpeedCoef = WheelLenght * 60UL;	// Коэффициент скорости, просто добавить RPM и поделить на 100000.
+float WheelDiameter = 680;							// Диаметр колеса, мм.
+float WheelLenght = M_PI * WheelDiameter;			// Длина колеса, мм.
+uint32_t SpeedCoef = (WheelLenght * 60.0F) + 0.5F;	// Коэффициент скорости, просто добавить RPM и поделить на 100000.
 
 //------------------------ For UART
 #define UART_BUFFER_SIZE 128
@@ -219,6 +219,10 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     case 0x00:
     {
         motor_packet_0_t *packet0 = (motor_packet_0_t *)raw_packet;
+
+		// RPM fix. Контроллер возвращает RPMx4.
+		packet0->RPM >>= 2;
+
         CANLib::obj_controller_rpm.SetValue(idx, packet0->RPM, CAN_TIMER_TYPE_NORMAL);
 
         // TODO: Длина окружности колеса захардкожена!!
@@ -251,8 +255,8 @@ void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet)
     {
         motor_packet_1_t *packet1 = (motor_packet_1_t *)raw_packet;
         
-        int16_t current = (packet1->Current / 4) * 10;
-        int16_t power = ((uint32_t)abs(packet1->Current) * (uint32_t)packet1->Voltage) / 40;
+        int16_t current = (packet1->Current * 10) / 4;
+        int16_t power = ((uint32_t)abs(packet1->Current) * (uint32_t)packet1->Voltage) / 40U;
         if(packet1->Current < 0) power = -power;
         
 		CANLib::obj_controller_voltage.SetValue(idx, packet1->Voltage, CAN_TIMER_TYPE_NORMAL);
