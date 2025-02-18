@@ -59,6 +59,13 @@ class MotorFardriverNew : public MotorDeviceInterface
 				switch(raw->_A1)
 				{
 					case 0x80:
+					case 0x87:
+					case 0x8E:
+					case 0x95:
+					case 0x9C:
+					case 0xA3:
+					case 0xAA:
+					case 0xB0:
 					{
 						FdNew::packet_80_t *packet = (FdNew::packet_80_t *) _data;
 						
@@ -75,7 +82,15 @@ class MotorFardriverNew : public MotorDeviceInterface
 						
 						break;
 					}
+					
 					case 0x81:
+					case 0x88:
+					case 0x8F:
+					case 0x96:
+					case 0x9D:
+					case 0xA4:
+					case 0xAB:
+					case 0xB1:
 					{
 						FdNew::packet_81_t *packet = (FdNew::packet_81_t *) _data;
 						
@@ -89,6 +104,19 @@ class MotorFardriverNew : public MotorDeviceInterface
 						
 						break;
 					}
+
+					case 0x82:
+					case 0x89:
+					case 0x90:
+					case 0x97:
+					case 0x9E:
+					case 0xA5:
+					case 0xAC:
+					case 0xB2:
+					{
+						break;
+					}
+					
 					case 0xB3:
 					{
 						FdNew::packet_B3_t *packet = (FdNew::packet_B3_t *) _data;
@@ -97,6 +125,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 						
 						break;
 					}
+					
 					case 0xB5:
 					{
 						FdNew::packet_B5_t *packet = (FdNew::packet_B5_t *) _data;
@@ -105,12 +134,18 @@ class MotorFardriverNew : public MotorDeviceInterface
 						
 						break;
 					}
+					
 					case 0xB6:
 					{
 						// Пока не получим первый раз последний пакет в посылки от контроллера (0xB6) - считаем что данные не готовы.
 						// В последствии считаем что данные актуальны, хоть и опаздывают.
 						_manager->common_data_ready[_idx] = true;
 						
+						break;
+					}
+
+					default:
+					{
 						break;
 					}
 				}
