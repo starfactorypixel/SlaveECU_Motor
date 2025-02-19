@@ -226,15 +226,15 @@ class MotorFardriverNew : public MotorDeviceInterface
 		static inline MMD::roll_t FixRoll(uint8_t raw)
 		{
 			// 08 - Стоп
-			// 0B - Вперёд
 			// 0A - Назад
+			// 0B - Вперёд
 			
 			MMD::roll_t roll;
 			switch(raw)
 			{
 				case 0x08: { roll = MMD::ROLL_STOP; break; }
-				case 0x0B: { roll = MMD::ROLL_REVERSE; break; }
-				case 0x0A: { roll = MMD::ROLL_FORWARD; break; }
+				case 0x0A: { roll = MMD::ROLL_REVERSE; break; }
+				case 0x0B: { roll = MMD::ROLL_FORWARD; break; }
 				default:   { roll = MMD::ROLL_UNKNOWN; break; }
 			}
 			
