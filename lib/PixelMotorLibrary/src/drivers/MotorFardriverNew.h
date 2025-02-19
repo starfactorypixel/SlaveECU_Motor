@@ -210,12 +210,12 @@ class MotorFardriverNew : public MotorDeviceInterface
 			// 0E - 02 - Задняя
 			
 			MMD::gear_t gear;
-			switch(raw)
+			switch( (raw & 0x03) )
 			{
-				case 0x0C: { gear = MMD::GEAR_NEUTRAL; break; }
+				case 0x00: { gear = MMD::GEAR_NEUTRAL; break; }
 				case 0x01: { gear = MMD::GEAR_FORWARD; break; }
-				case 0x0E: { gear = MMD::GEAR_REVERSE; break; }
-				default:   { gear = MMD::GEAR_UNKNOWN; break; }
+				case 0x02: { gear = MMD::GEAR_REVERSE; break; }
+				default:   { gear = MMD::GEAR_LOW; break; }
 			}
 			
 			return gear;
