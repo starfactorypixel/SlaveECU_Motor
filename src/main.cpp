@@ -13,6 +13,8 @@
 #include <MotorLogic.h>
 #include <MotorCtrl.h>
 #include <Analog.h>
+#include <Temperature.h>
+#include <OneWire.h>
 
 
 ADC_HandleTypeDef hadc1;
@@ -211,6 +213,8 @@ int main()
 	SPI::Setup();
 	Motors::Setup();
 	MotorCtrl::Setup();
+	OneWire::Setup();
+	TempStream::Setup();
 	CANLib::Setup();
 	
 	uint32_t current_time = HAL_GetTick();
@@ -222,6 +226,8 @@ int main()
 		SPI::Loop(current_time);
 		Motors::Loop(current_time);
 		MotorCtrl::Loop(current_time);
+		OneWire::Loop(current_time);
+		TempStream::Loop(current_time);
         CANLib::Loop(current_time);
 	}
 }
