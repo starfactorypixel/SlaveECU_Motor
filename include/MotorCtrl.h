@@ -3,7 +3,6 @@
 #include <EasyPinA.h>
 #include <CUtils.h>
 
-extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim3;
 
 namespace MotorCtrl
@@ -84,16 +83,12 @@ namespace MotorCtrl
 			[](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 			{
 				uint16_t throttle = (can_frame.data[1] | (can_frame.data[2] << 8));
-
-				auto *cfg = &Config::obj.body.throttle;
-
-				//DEBUG_LOG_TOPIC("ThrlVal", "motor: 1, idx: %d, val: %d\n", can_frame.data[0], throttle);
 				
-				// На Main было: MapClump(value, (uint16_t)650, (uint16_t)3000, (uint16_t)0, (uint16_t)1023);
-				// Тут было: uint16_t val = map<uint16_t>(throttle, 0, 1023, Config::obj.body.pwm.min, Config::obj.body.pwm.max);
+				auto *cfg = &Config::obj.body.throttle;
+				
 				uint16_t val = map_clump<uint16_t>(throttle, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
 				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);
-
+				
 				return CAN_RESULT_IGNORE;
 			}, 
 			// Колбек нарушения логики приёма
@@ -116,15 +111,12 @@ namespace MotorCtrl
 			[](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 			{
 				uint16_t throttle = (can_frame.data[1] | (can_frame.data[2] << 8));
-
+				
 				auto *cfg = &Config::obj.body.throttle;
 				
-				//DEBUG_LOG_TOPIC("ThrlVal", "motor: 2, idx: %d, val: %d\n", can_frame.data[0], throttle);
-				// На Main было: MapClump(value, (uint16_t)650, (uint16_t)3000, (uint16_t)0, (uint16_t)1023);
-				// Тут было: uint16_t val = map<uint16_t>(throttle, 0, 1023, Config::obj.body.pwm.min, Config::obj.body.pwm.max);
 				uint16_t val = map_clump<uint16_t>(throttle, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
 				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, val);
-
+				
 				return CAN_RESULT_IGNORE;
 			}, 
 			// Колбек нарушения логики приёма
@@ -143,27 +135,15 @@ namespace MotorCtrl
 		
 		CANLib::obj_transmission_value_1.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 		{
-			// По CAN должна приходить флаг по маске с одним битом.
-			// Любая другая ситуация является ошичной и включается нетраль
-			//uint8_t gear_raw = (can_frame.data[0] & GEAR_MASK);
-			//gear_t gear = IsOneBitSet(gear_raw) ? (gear_t)gear_raw : GEAR_NEUTRAL;
-			//SetGear(0, gear);
-			
 			SetGear(0, can_frame.data[0]);
-			
+
 			can_frame.function_id = CAN_FUNC_EVENT_OK;
 			return CAN_RESULT_CAN_FRAME;
 		});
 		CANLib::obj_transmission_value_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 		{
-			// По CAN должна приходить флаг по маске с одним битом.
-			// Любая другая ситуация является ошичной и включается нетраль
-			//uint8_t gear_raw = (can_frame.data[0] & GEAR_MASK);
-			//gear_t gear = IsOneBitSet(gear_raw) ? (gear_t)gear_raw : GEAR_NEUTRAL;
-			//SetGear(1, gear);
-
 			SetGear(1, can_frame.data[0]);
-			
+
 			can_frame.function_id = CAN_FUNC_EVENT_OK;
 			return CAN_RESULT_CAN_FRAME;
 		});
@@ -173,14 +153,16 @@ namespace MotorCtrl
 			bool state = (can_frame.data[0] == 0) ? false : true;
 			SetBreak(0, state);
 			
-			return CAN_RESULT_IGNORE;
+			can_frame.function_id = CAN_FUNC_EVENT_OK;
+			return CAN_RESULT_CAN_FRAME;
 		});
 		CANLib::obj_brakerecuperation_flag_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 		{
 			bool state = (can_frame.data[0] == 0) ? false : true;
 			SetBreak(1, state);
 			
-			return CAN_RESULT_IGNORE;
+			can_frame.function_id = CAN_FUNC_EVENT_OK;
+			return CAN_RESULT_CAN_FRAME;
 		});
 		
 		CANLib::obj_ignitionlock_flag_1.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
@@ -188,22 +170,23 @@ namespace MotorCtrl
 			bool state = (can_frame.data[0] == 0) ? false : true;
 			SetLock(0, state);
 			
-			return CAN_RESULT_IGNORE;
+			can_frame.function_id = CAN_FUNC_EVENT_OK;
+			return CAN_RESULT_CAN_FRAME;
 		});
 		CANLib::obj_ignitionlock_flag_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
 		{
 			bool state = (can_frame.data[0] == 0) ? false : true;
 			SetLock(1, state);
 			
-			return CAN_RESULT_IGNORE;
+			can_frame.function_id = CAN_FUNC_EVENT_OK;
+			return CAN_RESULT_CAN_FRAME;
 		});
 		
-
 		return;
 	}
 
+	/*
 	uint16_t val1 = 0;
-
 	const uint32_t gist1 = 10;
 	const uint32_t gist2 = 50;
 	const uint32_t gist3 = 100;
@@ -211,16 +194,18 @@ namespace MotorCtrl
 	uint32_t counter_pos = 0;
 	uint32_t counter_neg = 0;
 	uint32_t adc_val = 0;
+	*/
 	
 	inline void Loop(uint32_t &current_time)
 	{
 
+/*
 		static uint32_t tick_20 = 0;
 		if(current_time - tick_20 > 20)
 		{
 			tick_20 = current_time;
 
-/*			
+		
 			uint16_t throttle_adc = throttle.Get();
 			throttle_adc >>= 2;
 			
@@ -267,9 +252,8 @@ namespace MotorCtrl
 				if( counter_neg >= sample_counter )
 					adc_val--;
 			}
-*/			
 		}
-	
+*/		
 		
 		
 		current_time = HAL_GetTick();
