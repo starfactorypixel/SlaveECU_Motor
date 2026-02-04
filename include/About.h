@@ -5,8 +5,8 @@ namespace About
 	static constexpr char name[] = "MotorECU";
 	static constexpr char desc[] = "Motor control board for Pixel project";
 	static constexpr char board_type = Consts::BOARD_TYPE_MOTORS1;		// 5 bits
-	static constexpr char board_ver = 2;		// 3 bits
-	static constexpr char soft_ver = 2;			// 6 bits
+	static constexpr char board_ver = 3;		// 3 bits
+	static constexpr char soft_ver = 3;			// 6 bits
 	static constexpr char can_ver = 1;			// 2 bits
 	static constexpr char git[] = "https://github.com/starfactorypixel/SlaveECU_Motor";
 	
