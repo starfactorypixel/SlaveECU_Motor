@@ -1,5 +1,5 @@
 #pragma once
-#include <EasyPinD.h>
+#include <DrakePinD.hpp>
 #include <CANLibrary.h>
 
 extern CAN_HandleTypeDef hcan;
@@ -13,7 +13,7 @@ namespace CANLib
 	static constexpr uint8_t CFG_CANFrameBufferSize = 16;
 	static constexpr uint16_t CFG_CANFirstId = ENV_CAN_FIRST_ID;
 
-	EasyPinD can_rs(GPIOA, {GPIO_PIN_15, GPIO_MODE_OUTPUT_OD, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW});
+	DrakePinD can_rs({GPIOA, GPIO_PIN_15}, DrakePin::OutputOpenDrain, DrakePin::High);
 	
 	CANManager<CFG_CANObjectsCount, CFG_CANFrameBufferSize> can_manager(&HAL_CAN_Send);
 	
@@ -121,7 +121,7 @@ namespace CANLib
 		HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE);
 		HAL_CAN_Start(&hcan);
 		
-		can_rs.On();
+		can_rs.Off();
 		
 		return;
 	}
@@ -131,7 +131,7 @@ namespace CANLib
 		HAL_CAN_DeactivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE);
 		HAL_CAN_Stop(&hcan);
 		
-		can_rs.Off();
+		can_rs.On();
 		
 		return;
 	}

@@ -1,6 +1,5 @@
 #pragma once
 #include <inttypes.h>
-#include <EasyPinA.h>
 #include <CUtils.h>
 
 extern TIM_HandleTypeDef htim3;
@@ -11,13 +10,13 @@ namespace MotorCtrl
 	enum shift_mask_gear_t : uint8_t
 	{
 		GEAR_NEUTRAL =		0b00000000,
-		GEAR_FORWARD_LOW =	0b00000001,
-		GEAR_FORWARD_HI =	0b00000010,
-		GEAR_REVERSE =		0b00000100,
-		GEAR_MASK =			0b00000111
+		GEAR_FORWARD_LOW =	0b01000001,
+		GEAR_FORWARD_HI =	0b00100010,
+		GEAR_REVERSE =		0b10000000,
+		GEAR_MASK =			0b11100000
 	};
-	static uint8_t BREAK_RECOVERY_BIT = 4;
-	static uint8_t LOCK_BIT = 7;
+	static uint8_t BREAK_RECOVERY_BIT = 2;
+	static uint8_t LOCK_BIT = 1;
 
 	
 	// Управление передачей

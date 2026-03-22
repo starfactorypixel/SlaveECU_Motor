@@ -1,6 +1,6 @@
 #pragma once
 #include <AnalogMux.h>
-#include <EasyPinA.h>
+#include <DrakePinA.hpp>
 #include <CUtils.h>
 
 extern ADC_HandleTypeDef hadc1;
@@ -10,8 +10,8 @@ namespace Analog
 	uint16_t OnMuxRequest(uint8_t address);
 	void OnMuxResponse(uint8_t address, uint16_t value);
 	
-	EasyPinA adc_pin(&hadc1, GPIOB, GPIO_PIN_1, ADC_CHANNEL_9, ADC_SAMPLETIME_7CYCLES_5);
-	volt_calc_t VoltCalcParams = {((1 << 12) - 1), 3324, 82000, 10000, 17};
+	DrakePinA adc_pin({&hadc1, GPIOB, GPIO_PIN_1, ADC_CHANNEL_9}, ADC_SAMPLETIME_7CYCLES_5);
+	volt_calc_t VoltCalcParams = {((1 << 12) - 1), 3300, 69000, 10000, 0};
 	
 	AnalogMux<0> mux( OnMuxRequest, OnMuxResponse
 	/*,
@@ -25,7 +25,7 @@ namespace Analog
 	
 	uint16_t OnMuxRequest(uint8_t address)
 	{
-		return adc_pin.Get();
+		return adc_pin.ReadRaw();
 	}
 	
 	void OnMuxResponse(uint8_t address, uint16_t value)
