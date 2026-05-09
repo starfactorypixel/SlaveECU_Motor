@@ -50,72 +50,8 @@ namespace CANLib
 	CANObject<int16_t,  1> obj_temperature_controller_2(CFG_CANFirstId + 29, 1000);
 	CANObject<uint32_t, 1> obj_odometer(CFG_CANFirstId + 30, 5000);
 	CANObject<int8_t,   2> obj_temperature_ext(CFG_CANFirstId + 31);
-
-/*
-	//*********************************************************************
-	// CAN Blocks: specific blocks
-	//*********************************************************************
-	// 0x0104 ControllerErrors
-	// request | timer:250
-	// uint16_t bitmask 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Ошибки контроллеров: контроллер №1 — uint16, контроллер №2 — uint16
-	CANObject<uint16_t, 2> obj_controller_errors(0x0104, 250, CAN_ERROR_DISABLED);
-
-	// 0x0105 RPM
-	// request | timer:250
-	// uint16_t Об\м 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Обороты двигателей: контроллер №1 — uint16, контроллер №2 — uint16
-	CANObject<uint16_t, 2> obj_controller_rpm(0x0105, 250, CAN_ERROR_DISABLED);
-
-	// 0x0106 Speed
-	// request | timer:250
-	// uint16_t 100м\ч 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Расчетная скорость в сотнях метров в час: контроллер №1 — uint16, контроллер №2 — uint16
-	CANObject<uint16_t, 2> obj_controller_speed(0x0106, 250, CAN_ERROR_DISABLED);
-
-	// 0x0107 Voltage
-	// request | timer:500
-	// uint16_t 100мВ 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Напряжение на контроллерах в сотнях мВ: контроллер №1 — uint16, контроллер №2 — uint16
-	CANObject<uint16_t, 2> obj_controller_voltage(0x0107, 500, CAN_ERROR_DISABLED);
-
-	// 0x0108 Current
-	// request | timer:500
-	// int16_t 100мА 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Ток контроллеров в сотнях мА: контроллер №1 — int16, контроллер №2 — int16
-	CANObject<int16_t, 2> obj_controller_current(0x0108, 500, CAN_ERROR_DISABLED);
-
-	// 0x0109 Power
-	// request | timer:500
-	// int16_t Вт 1 + 2 + 2 { type[0] m1[1..2] m2[3..4] }
-	// Потребляемая (отдаваемая) мощность в Вт: контроллер №1 — uint16, контроллер №2 — uint16
-	CANObject<int16_t, 2> obj_controller_power(0x0109, 500, CAN_ERROR_DISABLED);
-
-	// 0x010A Gear+Roll
-	// request | timer:500
-	// uint8_t bitmask 1 + 1+1 + 1+1 { type[0] mg1[1] mr1[2] mg2[3] mr2[3] }
-	// Передача и фактическое направление вращения
-	CANObject<uint8_t, 4> obj_controller_gear_n_roll(0x010A, 500, CAN_ERROR_DISABLED);
-
-	// 0x010B TemperatureMotor
-	// request | timer:1000
-	// int16_t	°C	1 + 2 + 2	{ type[0] mt1[1..2] mt2[3..4] }
-	// Температура двигателей: №1 — int16, №2 — int16
-	CANObject<int16_t, 2> obj_motor_temperature(0x010B, 1000, CAN_ERROR_DISABLED);
-
-	// 0x010B TemperatureController
-	// request | timer:1000
-	// int16_t	°C	1 + 2 + 2	{ type[0] ct1[1..2] ct2[3..4] }
-	// Температура контроллеров: №1 — int16, №2 — int16
-	CANObject<int16_t, 2> obj_controller_temperature(0x010C, 1000, CAN_ERROR_DISABLED);
-
-	// 0x010C Odometer
-	// request | timer:5000
-	// uint32_t 100м 1 + 4 { type[0] m[1..4] }
-	// Одометр (общий для авто), в сотнях метров
-	CANObject<uint32_t, 1> obj_controller_odometer(0x010D, 5000, CAN_ERROR_DISABLED);
-*/	
-
+	
+	
 	void CAN_Enable()
 	{
 		HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_ERROR | CAN_IT_BUSOFF | CAN_IT_LAST_ERROR_CODE);

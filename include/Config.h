@@ -9,7 +9,7 @@ namespace Config
 	static constexpr uint16_t EEPROM_OFFSET_MAIN = 0;
 	static constexpr uint16_t DATA_SIZE = 256;
 	static constexpr uint16_t DATA_H_SIZE = 9;
-	static constexpr uint16_t DATA_PAGE_SIZE = SPI::eeprom.EEPROM_PAGE_SIZE;
+	static constexpr uint16_t DATA_PAGE_SIZE = 32;
 	static constexpr uint16_t EEPROM_OFFSET_MIRROR = DATA_SIZE + EEPROM_OFFSET_MAIN;
 	static constexpr uint32_t MIRROR_TIME_SYNC = 10 * 60 * 1000;
 	

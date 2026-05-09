@@ -399,8 +399,8 @@ static void MX_USART3_UART_Init(void)
 
 static void MX_TIM3_Init(void)
 {
-	TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-	TIM_MasterConfigTypeDef sMasterConfig = {0};
+	//TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+	//TIM_MasterConfigTypeDef sMasterConfig = {0};
 	TIM_OC_InitTypeDef sConfigOC = {0};
 
 	htim3.Instance = TIM3;

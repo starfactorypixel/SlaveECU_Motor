@@ -56,6 +56,8 @@ namespace Motors
 
 		switch(idx)
 		{
+			// Если ошибка связи, то это не отправиться в CAN.
+			
 			case MOTOR_1:
 			{
 				if(code == MotorDeviceInterface::ERROR_CTRL)
@@ -66,7 +68,7 @@ namespace Motors
 			case MOTOR_2:
 			{
 				if(code == MotorDeviceInterface::ERROR_CTRL)
-					CANLib::obj_controller_errors_1.SetValue(0, manager.common_data[MOTOR_2].errors, CAN_TIMER_TYPE_NONE, CAN_EVENT_TYPE_NORMAL);
+					CANLib::obj_controller_errors_2.SetValue(0, manager.common_data[MOTOR_2].errors, CAN_TIMER_TYPE_NONE, CAN_EVENT_TYPE_NORMAL);
 
 				break;
 			}
