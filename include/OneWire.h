@@ -54,10 +54,7 @@ namespace OneWire
 	{
 		sensors.Processing(current_time);
 		
-		
-		// При выходе обновляем время
 		current_time = HAL_GetTick();
-		
 		return;
 	}
 };
