@@ -4,9 +4,10 @@
 #include <drivers/MotorFardriverOld.h>
 #include <drivers/MotorFardriverNew.h>
 
-
 extern UART_HandleTypeDef hMotor1Uart;
 extern UART_HandleTypeDef hMotor2Uart;
+
+extern IBlockInfoSender &BlockInfoSender;
 
 /*
 void OnMotorEvent(const uint8_t motor_idx, motor_packet_raw_t *raw_packet);
@@ -54,6 +55,9 @@ namespace Motors
 	{
 		DEBUG_LOG_TOPIC("MOTOR-ERR", "idx: %d, code: %d\n", idx, code);
 
+		BlockInfoSender.SendErrorMsg(idx+1, code, manager.common_data[idx].errors);
+
+		/*
 		switch(idx)
 		{
 			// Если ошибка связи, то это не отправиться в CAN.
@@ -73,6 +77,7 @@ namespace Motors
 				break;
 			}
 		}
+		*/
 	}
 	
 	
@@ -111,6 +116,7 @@ namespace Motors
 		{
 			tick_25 = current_time;
 
+/*
 			uint32_t total_odometer = 0;
 			MotorManagerData::common_data_t *common_data;
 			
@@ -146,8 +152,12 @@ namespace Motors
 				total_odometer = (common_data->odometer > total_odometer) ? common_data->odometer : total_odometer;
 			}
 			
-			CANLib::obj_odometer.SetValue(0, total_odometer, CAN_TIMER_TYPE_NORMAL);
+		CANLib::obj_odometer.SetValue(0, total_odometer, CAN_TIMER_TYPE_NORMAL);
+
+
+*/	
 		}
+
 		
 		current_time = HAL_GetTick();
 		

@@ -10,8 +10,8 @@ namespace MotorCtrl
 	enum shift_mask_gear_t : uint8_t
 	{
 		GEAR_NEUTRAL =		0b00000000,
-		GEAR_FORWARD_LOW =	0b01000001,
-		GEAR_FORWARD_HI =	0b00100010,
+		GEAR_FORWARD_LOW =	0b01000000,
+		GEAR_FORWARD_HI =	0b00100000,
 		GEAR_REVERSE =		0b10000000,
 		GEAR_MASK =			0b11100000
 	};
@@ -23,22 +23,6 @@ namespace MotorCtrl
 	void SetGear(uint8_t idx, shift_mask_gear_t gear)
 	{
 		SPI::hc595.WriteByMask(idx, gear, GEAR_MASK);
-		
-		return;
-	}
-	
-	// Управление рекупирацией (тормозом)
-	void SetBreak(uint8_t idx, bool state)
-	{
-		SPI::hc595.SetState(idx, BREAK_RECOVERY_BIT, state);
-		
-		return;
-	}
-
-	// Управление питанием контроллера (замок зажигания)
-	void SetLock(uint8_t idx, bool state)
-	{
-		SPI::hc595.SetState(idx, LOCK_BIT, state);
 		
 		return;
 	}
@@ -59,6 +43,43 @@ namespace MotorCtrl
 		
 		return SetGear(idx, gear);
 	}
+	
+	// Управление рекупирацией (тормозом)
+	void SetBreak(uint8_t idx, uint8_t state)
+	{
+		SPI::hc595.SetState(idx, BREAK_RECOVERY_BIT, ((state == 0) ? false : true));
+		
+		return;
+	}
+	
+	// Управление питанием контроллера (замок зажигания)
+	void SetLock(uint8_t idx, uint8_t state)
+	{
+		SPI::hc595.SetState(idx, LOCK_BIT, ((state == 0) ? false : true));
+		
+		return;
+	}
+
+	// 
+	void SetThrottle(uint8_t idx, uint16_t raw)
+	{
+		uint16_t val = 0;
+		
+		if(raw > 0)
+		{
+			auto *cfg = &Config::obj.body.throttle;
+			val = map_clump<uint16_t>(raw, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
+		}
+
+		switch(idx)
+		{
+			case 0: __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val); break;
+			case 1: __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, val); break;
+			default: break;
+		}
+		
+		return;
+	}
 
 	
 	void HardwareSetup()
@@ -75,111 +96,6 @@ namespace MotorCtrl
 	inline void Setup()
 	{
 		HardwareSetup();
-
-		CANLib::obj_throttle_value_1.RegisterFunctionSetRealtime
-		(
-			// Колбек realtime данных
-			[](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-			{
-				uint16_t throttle = (can_frame.data[1] | (can_frame.data[2] << 8));
-				
-				auto *cfg = &Config::obj.body.throttle;
-				
-				uint16_t val = map_clump<uint16_t>(throttle, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
-				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val);
-				
-				return CAN_RESULT_IGNORE;
-			}, 
-			// Колбек нарушения логики приёма
-			[](uint32_t time_has_passed_ms) -> void
-			{
-				DEBUG_LOG_TOPIC("ThrlVal", "motor: 1, ERROR\n");
-				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0);
-				
-				// Защита отключена.
-				CANLib::obj_throttle_value_1.ResetRealtimeErrorState();
-			}, 
-			// Настройки
-			100, 0, true, 3
-		);
-		CANLib::obj_throttle_value_1.ResetRealtimeErrorState();
-
-		CANLib::obj_throttle_value_2.RegisterFunctionSetRealtime
-		(
-			// Колбек realtime данных
-			[](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-			{
-				uint16_t throttle = (can_frame.data[1] | (can_frame.data[2] << 8));
-				
-				auto *cfg = &Config::obj.body.throttle;
-				
-				uint16_t val = map_clump<uint16_t>(throttle, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
-				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, val);
-				
-				return CAN_RESULT_IGNORE;
-			}, 
-			// Колбек нарушения логики приёма
-			[](uint32_t time_has_passed_ms) -> void
-			{
-				DEBUG_LOG_TOPIC("ThrlVal", "motor: 2, ERROR\n");
-				__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, 0);
-
-				// Защита отключена.
-				CANLib::obj_throttle_value_2.ResetRealtimeErrorState();
-			}, 
-			// Настройки
-			100, 0, true, 3
-		);
-		CANLib::obj_throttle_value_2.ResetRealtimeErrorState();
-		
-		CANLib::obj_transmission_value_1.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			SetGear(0, can_frame.data[0]);
-
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
-		CANLib::obj_transmission_value_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			SetGear(1, can_frame.data[0]);
-
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
-
-		CANLib::obj_brakerecuperation_flag_1.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			bool state = (can_frame.data[0] == 0) ? false : true;
-			SetBreak(0, state);
-			
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
-		CANLib::obj_brakerecuperation_flag_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			bool state = (can_frame.data[0] == 0) ? false : true;
-			SetBreak(1, state);
-			
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
-		
-		CANLib::obj_ignitionlock_flag_1.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			bool state = (can_frame.data[0] == 0) ? false : true;
-			SetLock(0, state);
-			
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
-		CANLib::obj_ignitionlock_flag_2.RegisterFunctionSet([](can_frame_t &can_frame, can_error_t &error) -> can_result_t
-		{
-			bool state = (can_frame.data[0] == 0) ? false : true;
-			SetLock(1, state);
-			
-			can_frame.function_id = CAN_FUNC_EVENT_OK;
-			return CAN_RESULT_CAN_FRAME;
-		});
 		
 		return;
 	}
