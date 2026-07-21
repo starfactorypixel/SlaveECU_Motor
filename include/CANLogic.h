@@ -1,12 +1,13 @@
 #pragma once
 #include <DrakePinD.hpp>
 #include <CANLibrary.h>
-#include "CAN/CanBlockInfo.hpp"
+#include "CanObj/CanBlockInfo.hpp"
+#include "CanObj/CanBlockCfg.hpp"
 #include "CAN/CanMotorThrottle.hpp"
 #include "CAN/CanMotorCtrl.hpp"
 #include "CAN/CanMotorParam.hpp"
 #include "CAN/CanMotorGearRollParam.hpp"
-#include "CAN/CanStreamObj.hpp"
+#include "CanObj/CanStreamObj.hpp"
 
 extern CAN_HandleTypeDef hcan;
 extern bool HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length);
@@ -73,6 +74,7 @@ namespace CANLib
 	CANManager<32> can_manager(&HAL_CAN_Send, &HAL_GetTick, &OnInterruptCtrl);
 
 	CanBlockInfo obj_block_info(CAN_BASE_ID+0, OnStaticInfoReq, OnDynamicInfoReq);
+	//CanBlockCfg
 	CanMotorThrottle obj_throttle_value_1(CAN_BASE_ID+4, Motors::MOTOR_1, MotorCtrl::SetThrottle);
 	CanMotorThrottle obj_throttle_value_2(CAN_BASE_ID+5, Motors::MOTOR_2, MotorCtrl::SetThrottle);
 	CanMotorCtrl obj_transmission_value_1(CAN_BASE_ID+6, Motors::MOTOR_1, MotorCtrl::SetGear);

@@ -3,6 +3,7 @@
 #include <MotorManager.h>
 #include <drivers/MotorFardriverOld.h>
 #include <drivers/MotorFardriverNew.h>
+#include <CanObj/IBlockInfoSender.hpp>
 
 extern UART_HandleTypeDef hMotor1Uart;
 extern UART_HandleTypeDef hMotor2Uart;
