@@ -1,7 +1,6 @@
 #pragma once
 #include <ConstantLibrary.h>
-
-extern void GetSerialNumber(uint8_t *sn);
+#include <CUtils_Crypto.h>
 
 namespace About
 {
@@ -17,7 +16,7 @@ namespace About
 	
 	inline void Setup()
 	{
-		GetSerialNumber(sn);
+		GetSerialNumber64(sn);
 		
 		Logger.PrintNewLine();
 		Logger.PrintTopic("INFO").Printf("%s, board:%d, soft:%d, can:%d\n", name, board_ver, soft_ver, can_ver);

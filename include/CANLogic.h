@@ -8,6 +8,7 @@
 #include "CAN/CanMotorParam.hpp"
 #include "CAN/CanMotorGearRollParam.hpp"
 #include "CanObj/CanStreamObj.hpp"
+#include "CANFunc.h"
 
 extern CAN_HandleTypeDef hcan;
 extern bool HAL_CAN_Send(can_object_id_t id, uint8_t *data, uint8_t length);
@@ -17,64 +18,14 @@ namespace CANLib
 	static_assert(ENV_CAN_FIRST_ID == 0x0100 || ENV_CAN_FIRST_ID == 0x0130, "'ENV_CAN_FIRST_ID' must be 0x0100 or 0x0130 only!");
 	
 	static constexpr uint8_t CFG_CANObjectsCount = 32;
-	static constexpr uint8_t CFG_CANFrameBufferSize = 16;
 	static constexpr uint16_t CAN_BASE_ID = ENV_CAN_FIRST_ID;
 
 	DrakePinD can_rs({GPIOA, GPIO_PIN_15}, DrakePin::OutputOpenDrain, DrakePin::High);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 	
-
-
-
-	void OnInterruptCtrl(bool enable)
-	{
-		if(enable)
-			__HAL_CAN_ENABLE_IT(&hcan, CAN_IT_TX_MAILBOX_EMPTY);
-		else
-			__HAL_CAN_DISABLE_IT(&hcan, CAN_IT_TX_MAILBOX_EMPTY);
-	}
-
-	void OnStaticInfoReq(CanBlockInfo::block_info_static_t &data)
-	{
-		data.hw_ver = About::board_ver;
-		data.hw_type = About::board_type;
-		data.can_ver = About::can_ver;
-		data.sw_ver = About::soft_ver;
-		memcpy(data.sn, About::sn, sizeof(data.sn));
-		memcpy(data.features, (const uint8_t *)&About::features, sizeof(data.features));
-
-		return;
-	}
-
-	void OnDynamicInfoReq(CanBlockInfo::block_info_dynamic_t &data)
-	{
-		data.uptime = HAL_GetTick();
-		data.voltage = Analog::VoltCalc.GetmV( Analog::GetMuxValue(Analog::PORT_VIN) );
-		data.current = 0;
-		data.temperature = INT8_MIN;
-
-		return;
-	}
-
-
-	CANManager<32> can_manager(&HAL_CAN_Send, &HAL_GetTick, &OnInterruptCtrl);
+	CANManager<CFG_CANObjectsCount> can_manager(&HAL_CAN_Send, &HAL_GetTick, &OnInterruptCtrl);
 
 	CanBlockInfo obj_block_info(CAN_BASE_ID+0, OnStaticInfoReq, OnDynamicInfoReq);
-	//CanBlockCfg
+	CanBlockCfg obj_block_cfg(CAN_BASE_ID+1, OnCfgSaveReset, block_cfg_table, block_cfg_table_count);
 	CanMotorThrottle obj_throttle_value_1(CAN_BASE_ID+4, Motors::MOTOR_1, MotorCtrl::SetThrottle);
 	CanMotorThrottle obj_throttle_value_2(CAN_BASE_ID+5, Motors::MOTOR_2, MotorCtrl::SetThrottle);
 	CanMotorCtrl obj_transmission_value_1(CAN_BASE_ID+6, Motors::MOTOR_1, MotorCtrl::SetGear);
@@ -163,6 +114,7 @@ namespace CANLib
 		obj_temperature_controller_2.SetValueClassifier(GetTempStatus);
 		
 		can_manager.AddObject(obj_block_info);
+		can_manager.AddObject(obj_block_cfg);
 		can_manager.AddObject(obj_throttle_value_1);
 		can_manager.AddObject(obj_throttle_value_2);
 		can_manager.AddObject(obj_transmission_value_1);

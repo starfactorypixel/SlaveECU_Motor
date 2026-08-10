@@ -75,6 +75,10 @@ void HAL_CAN_TxMailbox2CompleteCallback(CAN_HandleTypeDef *hcan)
 
 void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
 {
+	uint32_t code = HAL_CAN_GetError(hcan);
+	if((code & (HAL_CAN_ERROR_TX_ALST0 | HAL_CAN_ERROR_TX_ALST1 | HAL_CAN_ERROR_TX_ALST2)) != 0)
+		return;
+	
 	Leds::obj.SetOn(Leds::LED_RED, 100);
 	DEBUG_LOG_TOPIC("CAN", "RX error event, code: 0x%08lX\n", HAL_CAN_GetError(hcan));
 	HAL_CAN_ResetError(hcan);
@@ -95,18 +99,6 @@ bool HAL_CAN_Send(can_object_id_t id, uint8_t *TxData, uint8_t length)
 	
 	return false;
 }
-
-
-void GetSerialNumber(uint8_t *sn)
-{
-	const uint32_t *uid = (const uint32_t *)UID_BASE;
-	
-	uint32_t serial[2];
-	serial[0] = uid[0] ^ uid[2];
-	serial[1] = uid[1];
-	memcpy(sn, serial, sizeof(serial));
-}
-
 
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
@@ -319,7 +311,7 @@ static void MX_CAN_Init(void)
 	hcan.Init.TimeTriggeredMode = DISABLE;
 	hcan.Init.AutoBusOff = ENABLE;
 	hcan.Init.AutoWakeUp = ENABLE;
-	hcan.Init.AutoRetransmission = DISABLE;
+	hcan.Init.AutoRetransmission = ENABLE;
 	hcan.Init.ReceiveFifoLocked = ENABLE;
 	hcan.Init.TransmitFifoPriority = ENABLE;
 	if(HAL_CAN_Init(&hcan) != HAL_OK)
