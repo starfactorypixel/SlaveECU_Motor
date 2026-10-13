@@ -39,7 +39,7 @@ namespace SPI
 	
 	SPIManager<2> manager(SPI_Config, SPI_Write, SPI_Read, SPI_WriteRead);
 	SPI_ZD25Q80B flash({GPIOB, GPIO_PIN_12}, SPI_BAUDRATEPRESCALER_2);
-	SPI_HC595<2> hc595({GPIOA, GPIO_PIN_8}, {GPIOB, GPIO_PIN_3}, {GPIOB, GPIO_PIN_2}, SPI_BAUDRATEPRESCALER_8);
+	SPI_HC595<2> hc595({GPIOA, 0}, {GPIOB, GPIO_PIN_3}, {GPIOB, GPIO_PIN_2}, SPI_BAUDRATEPRESCALER_8);
 	// hc595 не имеет CS, поэтому используется не используемый пин A8
 	
 	
