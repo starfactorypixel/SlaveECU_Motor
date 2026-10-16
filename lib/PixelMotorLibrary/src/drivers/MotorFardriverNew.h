@@ -16,8 +16,8 @@ class MotorFardriverNew : public MotorDeviceInterface
 	public:
 		
 		MotorFardriverNew() : MotorDeviceInterface(), _callback_ready(nullptr), 
-			_last_request_time(0), _last_response_time(0), _auth(false), _need_auth(false), 
-			_busy(false), _ready(false)
+			_last_request_time(0), _last_response_time(0), _need_auth(false), 
+			_busy(false), _ready(false), _alarm(false), _odometer_low(0)
 		{
 			memset(_data, 0x00, sizeof(_data));
 			
@@ -49,6 +49,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 			if(_ready == true)
 			{
 				_ready = false;
+				_Barrier();		// _data читаем только после флага _ready
 
 				_PostProcessing();
 
@@ -69,16 +70,19 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_80_t *packet = (FdNew::packet_80_t *) _data;
 						
-						if(common_data->errors != packet->error_flags)
+						// Авария - только биты ErrorAlarmMask (бит 15 ПО Fardriver аварией не считает)
+						bool alarm = (packet->error_flags & FdNew::ErrorAlarmMask) != 0;
+						if(alarm != _alarm)
 						{
-							_error.code = (packet->error_flags > 0) ? ERROR_CTRL : ERROR_NONE;
+							_alarm = alarm;
+							_error.code = (alarm == true) ? ERROR_CTRL : ERROR_NONE;
 						}
 						
 						common_data->errors = packet->error_flags;
-						common_data->rpm = packet->rpm >> 2;
-						common_data->speed = ((_speed_coefficient * packet->rpm) / 400000UL);
-						common_data->gear = FixGear(packet->gear);
-						common_data->roll = FixRoll(packet->roll);
+						common_data->rpm = packet->rpm / FdNew::RpmRatio;
+						common_data->speed = ((uint64_t)_speed_coefficient * packet->rpm) / (100000ULL * FdNew::RpmRatio);
+						common_data->gear = GetGear(packet);
+						common_data->roll = GetRoll(packet);
 						
 						break;
 					}
@@ -94,12 +98,14 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_81_t *packet = (FdNew::packet_81_t *) _data;
 						
-						int16_t power = (((uint32_t)abs(packet->current) * (uint32_t)packet->voltage) / 40U);
-						if(packet->current < 0) power = -power;
+						// ток x0.25 А, напряжение x0.1 В -> мощность, Вт = I * U / 40
+						int32_t power = ((int32_t)packet->current * (int32_t)packet->voltage) / 40;
+						if(power > INT16_MAX) power = INT16_MAX;
+						if(power < INT16_MIN) power = INT16_MIN;
 						
 						common_data->voltage = packet->voltage;
-						common_data->current = ((packet->current * 10U) / 4U);
-						common_data->power = power;
+						common_data->current = ((int32_t)packet->current * 10) / 4;
+						common_data->power = (int16_t)power;
 						common_data->throttle = packet->throttle;
 						
 						break;
@@ -114,6 +120,25 @@ class MotorFardriverNew : public MotorDeviceInterface
 					case 0xAC:
 					case 0xB2:
 					{
+						break;
+					}
+					
+					case 0x94:
+					{
+						FdNew::packet_94_t *packet = (FdNew::packet_94_t *) _data;
+						
+						_odometer_low = packet->odometer_low;
+						
+						break;
+					}
+					
+					case 0x98:
+					{
+						FdNew::packet_98_t *packet = (FdNew::packet_98_t *) _data;
+						
+						// Младшая часть приходит раньше (0x94), старшая - здесь. Масштаб 0.1 км = MotorData::odometer (100 м)
+						common_data->odometer = ((uint32_t)packet->odometer_high << 16) | _odometer_low;
+						
 						break;
 					}
 					
@@ -157,6 +182,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					_callback_ready(raw);
 				}
 				
+				_Barrier();		// _data дочитан до того, как ISR получит право его перезаписать
 				_busy = false;
 			}
 
@@ -168,10 +194,11 @@ class MotorFardriverNew : public MotorDeviceInterface
 				{
 					_manager->ResetCommonData(_idx);
 					_error.code = ERROR_LOST;
+					_alarm = false;
 				}
 			}
 			
-			if(time - _last_request_time > FdNew::PacketRequestInerval /*&& _auth == true*/)
+			if(time - _last_request_time > FdNew::PacketRequestInerval)
 			{
 				_last_request_time = time;
 
@@ -181,11 +208,10 @@ class MotorFardriverNew : public MotorDeviceInterface
 			return;
 		}
 		
-		// Приём пакета, в прерывании. Минимум самый важный действий.
+		// Приём пакета, вызывается из прерывания. Минимум действий.
 		virtual void RawRx(const uint8_t *raw, const uint8_t length) override
 		{
-			_error.code = ERROR_NONE;
-			if(memcmp(FdNew::PacketInitRx, raw, sizeof(FdNew::PacketInitRx)) == 0)
+			if(length >= sizeof(FdNew::PacketInitRx) && memcmp(FdNew::PacketInitRx, raw, sizeof(FdNew::PacketInitRx)) == 0)
 			{
 				_need_auth = true; return;
 			}
@@ -195,53 +221,49 @@ class MotorFardriverNew : public MotorDeviceInterface
 			if(_CheckCRCSum(raw) == false){ _error.code = ERROR_CRC; return; }
 			
 			memcpy(_data, raw, sizeof(_data));
+			_Barrier();		// _data записан до выставления флагов
 			
-			_ready = true;
+			// Пакет исправен: сбрасываем ошибку канала, но не теряем аварию контроллера
+			_error.code = (_alarm == true) ? ERROR_CTRL : ERROR_NONE;
 			_busy = true;
-			_auth = true;
+			_ready = true;
 			
 			return;
 		}
 		
-		static inline MMD::gear_t FixGear(uint8_t raw)
+		// Передача: D0 биты 0-1
+		static inline MMD::gear_t GetGear(const FdNew::packet_80_t *packet)
 		{
-			// 0С,04 - 00 - Нейтраль
-			// 01,09 - 01 - Передняя HI
-			// 0E,06 - 02 - Задняя
-			// XX,XX - 03 - Передняя LO
-			
-			MMD::gear_t gear;
-			switch( (raw & 0x03) )
+			switch(packet->gear)
 			{
-				case 0x00: { gear = MMD::GEAR_NEUTRAL; break; }
-				case 0x01: { gear = MMD::GEAR_FORWARD; break; }
-				case 0x02: { gear = MMD::GEAR_REVERSE; break; }
-				case 0x03: { gear = MMD::GEAR_LOW; break; }
-				default:   { gear = MMD::GEAR_UNKNOWN; break; }
+				case FdNew::GEAR_RAW_NEUTRAL: { return MMD::GEAR_NEUTRAL; }
+				case FdNew::GEAR_RAW_FORWARD: { return MMD::GEAR_FORWARD; }
+				case FdNew::GEAR_RAW_REVERSE: { return MMD::GEAR_REVERSE; }
+				case FdNew::GEAR_RAW_LOW:     { return MMD::GEAR_LOW; }
+				default:                      { return MMD::GEAR_UNKNOWN; }
 			}
-			
-			return gear;
 		}
 		
-		static inline MMD::roll_t FixRoll(uint8_t raw)
+		// Направление вращения: D0 бит 5 - вращается, бит 4 - против направления передачи.
+		// Передача R задаёт движение назад, N/D/Low - вперёд. Бит 6 (WEAK) и бит 7 к направлению не относятся.
+		static inline MMD::roll_t GetRoll(const FdNew::packet_80_t *packet)
 		{
-			// 08 - Стоп
-			// 0A - Назад
-			// 0B - Вперёд
+			if(packet->moving == 0) return MMD::ROLL_STOP;
 			
-			MMD::roll_t roll;
-			switch(raw)
-			{
-				case 0x08: { roll = MMD::ROLL_STOP; break; }
-				case 0x0A: { roll = MMD::ROLL_REVERSE; break; }
-				case 0x0B: { roll = MMD::ROLL_FORWARD; break; }
-				default:   { roll = MMD::ROLL_UNKNOWN; break; }
-			}
+			bool forward = (packet->gear != FdNew::GEAR_RAW_REVERSE);
+			if(packet->against == 1) forward = !forward;
 			
-			return roll;
+			return (forward == true) ? MMD::ROLL_FORWARD : MMD::ROLL_REVERSE;
 		}
 		
 	private:
+		
+		// Компиляторный барьер: запрещает переносить обращения к памяти (_data) через флаги.
+		// На одноядерном Cortex-M3 этого достаточно, __DMB() не нужен.
+		static inline void _Barrier()
+		{
+			__asm__ __volatile__("" ::: "memory");
+		}
 		
 		bool _CheckCRCSum(const uint8_t *array)
 		{
@@ -275,10 +297,11 @@ class MotorFardriverNew : public MotorDeviceInterface
 		callback_ready_t _callback_ready;	// Колбек принятого пакета, если указан
 		uint32_t _last_request_time;		// Время последнего цикла обновления данных
 		uint32_t _last_response_time;		// Время последнего принятого пакета данных
-		bool _auth;							// Флаг пройденной авторизации
-		bool _need_auth;					// Флаг необходимости авторизации
-		bool _busy;							// Флаг того, что разбор данных не окончен и новые копировать нельзя
-		bool _ready;						// Флаг того, что массив данные приняты и готовы к анализу
+		volatile bool _need_auth;			// Флаг необходимости авторизации
+		volatile bool _busy;				// Флаг того, что разбор данных не окончен и новые копировать нельзя
+		volatile bool _ready;				// Флаг того, что массив данные приняты и готовы к анализу
+		volatile bool _alarm;				// Контроллер сообщает об аварии (error_flags & ErrorAlarmMask)
+		uint16_t _odometer_low;				// Младшее слово пробега из пакета 0x94
 		
 		uint8_t _data[FdNew::PacketSize];	// Холодный массив данных (Работа в программе)
 

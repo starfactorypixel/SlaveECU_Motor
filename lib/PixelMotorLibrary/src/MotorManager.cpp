@@ -19,6 +19,7 @@ void MotorManager::Tick(uint32_t &time)
 	for(uint8_t idx = 0; idx < _max_dev; ++idx)
 	{
 		device = _device[idx];
+		if(device == nullptr) continue;
 		
 		device->Tick(time);
 		
