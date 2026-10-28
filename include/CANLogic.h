@@ -43,6 +43,10 @@ namespace CANLib
 	auto &data1 = Motors::manager.common_data[Motors::MOTOR_1];
 	auto &data2 = Motors::manager.common_data[Motors::MOTOR_2];
 
+	
+
+	CanMotorParam<uint16_t> obj_throttlevolt_1(CAN_BASE_ID+12, &data1.throttle_voltage, 1550);
+	CanMotorParam<uint16_t> obj_throttlevolt_2(CAN_BASE_ID+13, &data2.throttle_voltage, 1550);
 	CanMotorParam<uint16_t> obj_rpm_1(CAN_BASE_ID+14, &data1.rpm, 250);
 	CanMotorParam<uint16_t> obj_rpm_2(CAN_BASE_ID+15, &data2.rpm, 250);
 	CanMotorParam<uint16_t> obj_speed_1(CAN_BASE_ID+16, &data1.speed, 250);
@@ -125,6 +129,8 @@ namespace CANLib
 		can_manager.AddObject(obj_ignitionlock_flag_2);
 		//can_manager.AddObject(obj_controller_errors_1);
 		//can_manager.AddObject(obj_controller_errors_2);
+		can_manager.AddObject(obj_throttlevolt_1);
+		can_manager.AddObject(obj_throttlevolt_2);
 		can_manager.AddObject(obj_rpm_1);
 		can_manager.AddObject(obj_rpm_2);
 		can_manager.AddObject(obj_speed_1);

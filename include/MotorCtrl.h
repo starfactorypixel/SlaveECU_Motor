@@ -63,14 +63,9 @@ namespace MotorCtrl
 	// 
 	void SetThrottle(uint8_t idx, uint16_t raw)
 	{
-		uint16_t val = 0;
+		const auto &cfg = Config::obj.body.throttle;
+		uint16_t val = map_clump<uint16_t>(raw, 0, 5000, cfg.pwm_min, cfg.pwm_max);
 		
-		if(raw > 0)
-		{
-			auto *cfg = &Config::obj.body.throttle;
-			val = map_clump<uint16_t>(raw, cfg->pedal_min, cfg->pedal_max, cfg->pwm_min, cfg->pwm_max);
-		}
-
 		switch(idx)
 		{
 			case 0: __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, val); break;

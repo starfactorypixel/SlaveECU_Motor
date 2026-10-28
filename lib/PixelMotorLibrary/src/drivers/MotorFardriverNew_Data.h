@@ -153,7 +153,18 @@ namespace FardriverNew
 		uint16_t _CRC;
 	};
 	static_assert(sizeof(packet_98_t) == PacketSize, "Structures should have the same size!");
-
+	
+	// Пакет 0x99 (адрес 0x82)
+	struct __attribute__((__packed__)) packet_99_t
+	{
+		uint8_t _A0;
+		uint8_t _A1;
+		uint16_t throttle_voltage;	// D0-1, x0.01 V - напряжение на входе педали газа
+		uint8_t _D2[10];
+		uint16_t _CRC;
+	};
+	static_assert(sizeof(packet_99_t) == PacketSize, "Structures should have the same size!");
+	
 	// Пакет 0xB3 (адрес 0xD6)
 	struct __attribute__((__packed__)) packet_B3_t
 	{

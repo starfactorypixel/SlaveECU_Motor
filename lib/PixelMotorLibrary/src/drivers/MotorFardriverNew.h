@@ -142,6 +142,15 @@ class MotorFardriverNew : public MotorDeviceInterface
 						break;
 					}
 					
+					case 0x99:
+					{
+						FdNew::packet_99_t *packet = (FdNew::packet_99_t *) _data;
+						
+						common_data->throttle_voltage = packet->throttle_voltage;
+						
+						break;
+					}
+					
 					case 0xB3:
 					{
 						FdNew::packet_B3_t *packet = (FdNew::packet_B3_t *) _data;

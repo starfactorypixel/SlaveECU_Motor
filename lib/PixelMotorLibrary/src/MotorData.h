@@ -37,5 +37,6 @@ namespace MotorManagerData
 		uint32_t odometer;			// 100 m
 		uint16_t speed;				// 0.1 kmh
 		int16_t power;				// 1.0 W
+		uint16_t throttle_voltage;	// 10 mV
 	};
 }
