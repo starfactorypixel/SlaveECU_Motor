@@ -64,7 +64,7 @@ namespace CANLib
 	CanMotorParam<int16_t> obj_temperature_controller_1(CAN_BASE_ID+28, &data1.temp_controller, 1000);
 	CanMotorParam<int16_t> obj_temperature_controller_2(CAN_BASE_ID+29, &data2.temp_controller, 1000);
 	CanMotorParam<uint32_t> obj_odometer(CAN_BASE_ID+30, &data1.odometer, 5000);													// может оба одометра?
-	CanStreamObj<int8_t> obj_temperature(CAN_BASE_ID+31, TempStream::temperatures, sizeofarray(TempStream::temperatures));
+	CanStreamObj<int8_t, 16> obj_temperature(CAN_BASE_ID+31);
 
 
 
@@ -165,3 +165,4 @@ namespace CANLib
 }
 
 IBlockInfoSender &BlockInfoSender = CANLib::obj_block_info;
+ICanStream &CanTempStream = CANLib::obj_temperature;
