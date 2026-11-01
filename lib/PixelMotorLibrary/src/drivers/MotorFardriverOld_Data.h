@@ -18,8 +18,14 @@ namespace FardriverOld
 	// Пакет запроса данных с контроллера
 	static constexpr uint8_t PacketRequest[] = {0xAA, 0x13, 0xEC, 0x07, 0x09, 0x6F, 0x28, 0xD7};
 	
-	// Интервал запроса данных из контроллера
-	static constexpr uint16_t PacketRequestInerval = 550;
+	// Интервал запроса данных из контроллера, мс
+	static constexpr uint16_t PacketRequestInterval = 550;
+	
+	// Через сколько мс без пакетов считать связь потерянной
+	static constexpr uint16_t LinkTimeout = 1000;
+	
+	// Множитель оборотов: контроллер отдаёт об/мин * RpmRatio
+	static constexpr uint8_t RpmRatio = 4U;
 	
 	
 	// Типы ошибок контроллера
@@ -73,8 +79,8 @@ namespace FardriverOld
 		error_t error_flags;
 		uint16_t rpm;
 		uint8_t follow;
-		uint8_t gear : 4;
-		uint8_t roll : 4;
+		uint8_t gear : 4;			// б0-1 передача: 0 N, 1 D, 2 R, 3 Low; б2-3 уровень скорости
+		uint8_t roll : 4;			// 0 - стоит, 1 - вращается в сторону передачи, 2 и больше - против
 		uint8_t hall;
 		uint8_t mtpa_angle;
 		uint8_t _A1;

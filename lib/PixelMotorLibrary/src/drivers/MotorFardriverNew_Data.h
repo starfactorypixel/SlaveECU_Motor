@@ -12,6 +12,7 @@
 		0x82,89,90,97,9E,A5,AC,B2 - фазные токи.
 	Остальные пакеты - по одному разу за цикл (параметры, температуры, пробег).
 */
+
 namespace FardriverNew
 {
 	// Пакет которым флудит контроллер. Запрос на подключение
@@ -30,8 +31,11 @@ namespace FardriverNew
 	// Пакет запроса данных с контроллера (keep-alive, тот же что и PacketInitTx)
 	static constexpr uint8_t PacketRequest[] = {0xAA, 0x13, 0xEC, 0x07, 0x01, 0xF1, 0xA2, 0x5D};
 
-	// Интервал запроса данных из контроллера
-	static constexpr uint16_t PacketRequestInerval = 1250;
+	// Интервал запроса данных из контроллера, мс
+	static constexpr uint16_t PacketRequestInterval = 1250;
+	
+	// Через сколько мс без пакетов считать связь потерянной
+	static constexpr uint16_t LinkTimeout = 1000;
 
 	// Множитель оборотов: контроллер отдаёт об/мин * RpmRatio (настройка контроллера, по умолчанию 4)
 	static constexpr uint8_t RpmRatio = 4U;
@@ -130,30 +134,6 @@ namespace FardriverNew
 	};
 	static_assert(sizeof(packet_81_t) == PacketSize, "Structures should have the same size!");
 
-	// Пакет 0x94 (адрес 0x69)
-	struct __attribute__((__packed__)) packet_94_t
-	{
-		uint8_t _A0;
-		uint8_t _A1;
-		uint8_t _D0[8];
-		uint16_t odometer_low;		// D8-9, младшее слово пробега
-		uint8_t _D10;
-		uint8_t _D11;
-		uint16_t _CRC;
-	};
-	static_assert(sizeof(packet_94_t) == PacketSize, "Structures should have the same size!");
-
-	// Пакет 0x98 (адрес 0x7C)
-	struct __attribute__((__packed__)) packet_98_t
-	{
-		uint8_t _A0;
-		uint8_t _A1;
-		uint8_t _D0[10];
-		uint16_t odometer_high;		// D10-11, старшее слово пробега (вместе с 0x94: x0.1 km)
-		uint16_t _CRC;
-	};
-	static_assert(sizeof(packet_98_t) == PacketSize, "Structures should have the same size!");
-	
 	// Пакет 0x99 (адрес 0x82)
 	struct __attribute__((__packed__)) packet_99_t
 	{
@@ -205,5 +185,30 @@ namespace FardriverNew
 		uint16_t _CRC;
 	};
 	static_assert(sizeof(packet_B5_t) == PacketSize, "Structures should have the same size!");
+	
+	
+	// CRC-16/MODBUS с начальным значением 0x7F3C: пакеты от контроллера и команды записи
+	static uint16_t CRC16(const uint8_t *array, uint8_t length)
+	{
+		uint16_t crc = 0x7F3C;
 
+		for(uint8_t idx = 0; idx < length; ++idx)
+		{
+			crc ^= (uint16_t)array[idx];
+			for(uint8_t i = 8; i != 0; --i)
+			{
+				if((crc & 0x0001) != 0)
+				{
+					crc >>= 1;
+					crc ^= 0xA001;
+				}
+				else
+				{
+					crc >>= 1;
+				}
+			}
+		}
+
+		return crc;
+	}
 }

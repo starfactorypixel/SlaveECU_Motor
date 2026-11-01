@@ -23,7 +23,7 @@ void MotorManager::Tick(uint32_t &time)
 		
 		device->Tick(time);
 		
-		if(device->GetNewError(error_code) == true)
+		if(device->GetNewError(error_code) == true && _callback_error != nullptr)
 		{
 			_callback_error(idx, error_code);
 		}
@@ -44,6 +44,9 @@ void MotorManager::RawRx(uint8_t idx, const uint8_t *raw, const uint8_t length)
 
 void MotorManager::RawTx(uint8_t idx, const uint8_t *raw, const uint8_t length)
 {
+	if(idx >= _max_dev) return;
+	if(_callback_tx == nullptr) return;
+
 	_callback_tx(idx, raw, length);
 	
 	return;
@@ -53,7 +56,10 @@ void MotorManager::ResetCommonData(uint8_t idx)
 {
 	if(idx >= _max_dev) return;
 	
+	// Одометр - накопленное значение, при потере связи его не обнуляем
+	uint32_t odometer = common_data[idx].odometer;
 	memset(&common_data[idx], 0x00, sizeof(MotorManagerData::common_data_t));
+	common_data[idx].odometer = odometer;
 	common_data_ready[idx] = false;
 
 	return;

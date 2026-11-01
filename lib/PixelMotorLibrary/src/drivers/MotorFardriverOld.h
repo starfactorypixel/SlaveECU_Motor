@@ -1,7 +1,6 @@
 #pragma once
 #include <inttypes.h>
 #include <string.h>
-#include <math.h>
 #include <MotorManager.h>
 #include <MotorDeviceInterface.h>
 #include "MotorFardriverOld_Data.h"
@@ -16,8 +15,8 @@ class MotorFardriverOld : public MotorDeviceInterface
 	public:
 		
 		MotorFardriverOld() : MotorDeviceInterface(), _callback_ready(nullptr), 
-			_last_request_time(0), _last_response_time(0), _auth(false), _need_auth(false), 
-			_busy(false), _ready(false)
+			_last_request_time(0), _last_response_time(0), _need_auth(false), 
+			_busy(false), _ready(false), _alarm(false)
 		{
 			memset(_data, 0x00, sizeof(_data));
 			
@@ -49,8 +48,9 @@ class MotorFardriverOld : public MotorDeviceInterface
 			if(_ready == true)
 			{
 				_ready = false;
+				_Barrier();		// _data читаем только после флага _ready
 			
-				// Т.к. данные представленны в формате big-endian, обращаем массив для просторы работы
+				// Т.к. данные представлены в формате big-endian, обращаем массив для простоты работы
 				_ReverseArray(_data, sizeof(_data));
 
 				_PostProcessing();
@@ -65,16 +65,20 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_00_t *packet = (FdOld::packet_00_t *) _data;
 						
-						if(common_data->errors != packet->error_flags)
+						bool alarm = (packet->error_flags != 0);
+						if(alarm != _alarm)
 						{
-							_error.code = (packet->error_flags > 0) ? ERROR_CTRL : ERROR_NONE;
+							_alarm = alarm;
+							_error.code = (alarm == true) ? ERROR_CTRL : ERROR_NONE;
 						}
 						
 						common_data->errors = packet->error_flags;
-						common_data->rpm = packet->rpm >> 2;
-						common_data->speed = ((_speed_coefficient * packet->rpm) / 400000UL);
+						common_data->rpm = packet->rpm / FdOld::RpmRatio;
+						// 0.1 км/ч = об/мин x L[0.1 мм] x 60 / 1000000. Переполнение - выше ~11400 об/мин (колесо 500 мм - ~1000 км/ч)
+						common_data->speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdOld::RpmRatio);
+						_OdometerUpdate(common_data->odometer, packet->rpm, FdOld::RpmRatio, FdOld::LinkTimeout, time);
 						common_data->gear = FixGear(packet->gear);
-						common_data->roll = FixRoll(packet->roll);
+						common_data->roll = FixRoll(packet->gear, packet->roll);
 						
 						break;
 					}
@@ -82,12 +86,14 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_01_t *packet = (FdOld::packet_01_t *) _data;
 						
-						int16_t power = (((uint32_t)abs(packet->current) * (uint32_t)packet->voltage) / 40U);
-						if(packet->current < 0) power = -power;
+						// ток x0.25 А, напряжение x0.1 В -> мощность, Вт = I * U / 40
+						int32_t power = ((int32_t)packet->current * (int32_t)packet->voltage) / 40;
+						if(power > INT16_MAX) power = INT16_MAX;
+						if(power < INT16_MIN) power = INT16_MIN;
 						
 						common_data->voltage = packet->voltage;
-						common_data->current = ((packet->current * 10U) / 4U);
-						common_data->power = power;
+						common_data->current = ((int32_t)packet->current * 10) / 4;
+						common_data->power = (int16_t)power;
 						common_data->throttle = packet->throttle;
 						
 						break;
@@ -110,7 +116,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					}
 					case 0x0C:
 					{
-						// Пока не получим первый раз последний пакет в посылки от контроллера (0x0C) - считаем что данные не готовы.
+						// Пока не получим первый раз последний пакет посылки от контроллера (0x0C) - считаем что данные не готовы.
 						// На самом деле это предпоследний пакет посылки, но последний это 0x00 и его сложно отследить.
 						// В последствии считаем что данные актуальны, хоть и опаздывают.
 						_manager->common_data_ready[_idx] = true;
@@ -126,6 +132,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					_callback_ready(raw);
 				}
 				
+				_Barrier();		// _data дочитан до того, как ISR получит право его перезаписать
 				_busy = false;
 			}
 			
@@ -133,14 +140,15 @@ class MotorFardriverOld : public MotorDeviceInterface
 			else
 			{
 				// Если от контроллера давно не было данных
-				if(_error.code != ERROR_LOST && time - _last_response_time > 1000)
+				if(_error.code != ERROR_LOST && time - _last_response_time > FdOld::LinkTimeout)
 				{
 					_manager->ResetCommonData(_idx);
 					_error.code = ERROR_LOST;
+					_alarm = false;
 				}
 			}
 
-			if(time - _last_request_time > FdOld::PacketRequestInerval /*&& _auth == true*/)
+			if(time - _last_request_time > FdOld::PacketRequestInterval)
 			{
 				_last_request_time = time;
 
@@ -150,12 +158,10 @@ class MotorFardriverOld : public MotorDeviceInterface
 			return;
 		}
 		
-		// Приём пакета, в прерывании. Минимум самый важный действий.
+		// Приём пакета, вызывается из прерывания. Минимум действий.
 		virtual void RawRx(const uint8_t *raw, const uint8_t length) override
 		{
-			_error.code = ERROR_NONE;
-			
-			if(memcmp(FdOld::PacketInitRx, raw, sizeof(FdOld::PacketInitRx)) == 0)
+			if(length >= sizeof(FdOld::PacketInitRx) && memcmp(FdOld::PacketInitRx, raw, sizeof(FdOld::PacketInitRx)) == 0)
 			{
 				_need_auth = true; return;
 			}
@@ -165,10 +171,12 @@ class MotorFardriverOld : public MotorDeviceInterface
 			if(_CheckCRCSum(raw) == false){ _error.code = ERROR_CRC; return; }
 			
 			memcpy(_data, raw, sizeof(_data));
+			_Barrier();		// _data записан до выставления флагов
 			
-			_ready = true;
+			// Пакет исправен: сбрасываем ошибку канала, но не теряем аварию контроллера
+			_error.code = (_alarm == true) ? ERROR_CTRL : ERROR_NONE;
 			_busy = true;
-			_auth = true;
+			_ready = true;
 			
 			return;
 		}
@@ -178,43 +186,37 @@ class MotorFardriverOld : public MotorDeviceInterface
 			return (raw <= 200) ? (uint8_t)raw : (int8_t)raw;
 		}
 		
+		// Передача: младший полубайт, биты 0-1 (биты 2-3 - уровень скорости). 0x0C - N, 0x01 - D, 0x0E - R.
 		static inline MMD::gear_t FixGear(uint8_t raw)
 		{
-			// 0С - 00 - Нейтраль
-			// 01 - 01 - Передняя
-			// 0E - 02 - Задняя
-			
-			MMD::gear_t gear;
-			switch(raw)
+			switch(raw & 0x03)
 			{
-				case 0x0C: { gear = MMD::GEAR_NEUTRAL; break; }
-				case 0x01: { gear = MMD::GEAR_FORWARD; break; }
-				case 0x0E: { gear = MMD::GEAR_REVERSE; break; }
-				default:   { gear = MMD::GEAR_UNKNOWN; break; }
+				case 0x00: { return MMD::GEAR_NEUTRAL; }
+				case 0x01: { return MMD::GEAR_FORWARD; }
+				case 0x02: { return MMD::GEAR_REVERSE; }
+				default:   { return MMD::GEAR_LOW; }
 			}
-			
-			return gear;
 		}
 		
-		static inline MMD::roll_t FixRoll(uint8_t raw)
+		// Направление: старший полубайт - 0 стоит, 1 вращается в сторону передачи, 2 и больше - против.
+		// Передача R задаёт движение назад, N/D/Low - вперёд (как в ПО Fardriver).
+		static inline MMD::roll_t FixRoll(uint8_t gear, uint8_t raw)
 		{
-			// 00 - Стоп
-			// 01 - Назад
-			// 03 - Вперёд
+			if(raw == 0) return MMD::ROLL_STOP;
 			
-			MMD::roll_t roll;
-			switch(raw)
-			{
-				case 0x00: { roll = MMD::ROLL_STOP; break; }
-				case 0x01: { roll = MMD::ROLL_REVERSE; break; }
-				case 0x03: { roll = MMD::ROLL_FORWARD; break; }
-				default:   { roll = MMD::ROLL_UNKNOWN; break; }
-			}
+			bool forward = ((gear & 0x03) != 0x02);
+			if(raw >= 2) forward = !forward;
 			
-			return roll;
+			return (forward == true) ? MMD::ROLL_FORWARD : MMD::ROLL_REVERSE;
 		}
 		
 	private:
+		
+		// Компиляторный барьер: запрещает переносить обращения к памяти (_data) через флаги.
+		static inline void _Barrier()
+		{
+			__asm__ __volatile__("" ::: "memory");
+		}
 		
 		bool _CheckCRCSum(const uint8_t *array)
 		{
@@ -233,11 +235,11 @@ class MotorFardriverOld : public MotorDeviceInterface
 		callback_ready_t _callback_ready;	// Колбек принятого пакета, если указан
 		uint32_t _last_request_time;		// Время последнего цикла обновления данных
 		uint32_t _last_response_time;		// Время последнего принятого пакета данных
-		bool _auth;							// Флаг пройденной авторизации
-		bool _need_auth;					// Флаг необходимости авторизации
-		bool _busy;							// Флаг того, что разбор данных не окончен и новые копировать нельзя
-		bool _ready;						// Флаг того, что массив данные приняты и готовы к анализу
+		volatile bool _need_auth;			// Флаг необходимости авторизации
+		volatile bool _busy;				// Флаг того, что разбор данных не окончен и новые копировать нельзя
+		volatile bool _ready;				// Флаг того, что массив данных принят и готов к анализу
+		volatile bool _alarm;				// Контроллер сообщает об аварии
 		
-		uint8_t _data[FdOld::PacketSize];	// Холодный массив данных (Работа в программе)
+		uint8_t _data[FdOld::PacketSize];	// Копия принятого пакета для разбора в Tick
 		
 };

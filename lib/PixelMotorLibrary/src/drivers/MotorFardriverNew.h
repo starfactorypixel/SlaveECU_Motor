@@ -1,10 +1,10 @@
 #pragma once
 #include <inttypes.h>
 #include <string.h>
-#include <math.h>
 #include <MotorManager.h>
 #include <MotorDeviceInterface.h>
 #include "MotorFardriverNew_Data.h"
+#include "MotorFardriverNew_Ctrl.h"
 
 namespace FdNew = FardriverNew;
 namespace MMD = MotorManagerData;
@@ -12,12 +12,12 @@ namespace MMD = MotorManagerData;
 class MotorFardriverNew : public MotorDeviceInterface
 {
 	using callback_ready_t = void (*)(const FdNew::packet_raw_t *data);
-	
+
 	public:
 		
 		MotorFardriverNew() : MotorDeviceInterface(), _callback_ready(nullptr), 
 			_last_request_time(0), _last_response_time(0), _need_auth(false), 
-			_busy(false), _ready(false), _alarm(false), _odometer_low(0)
+			_busy(false), _ready(false), _alarm(false)
 		{
 			memset(_data, 0x00, sizeof(_data));
 			
@@ -80,7 +80,9 @@ class MotorFardriverNew : public MotorDeviceInterface
 						
 						common_data->errors = packet->error_flags;
 						common_data->rpm = packet->rpm / FdNew::RpmRatio;
-						common_data->speed = ((uint64_t)_speed_coefficient * packet->rpm) / (100000ULL * FdNew::RpmRatio);
+						// 0.1 км/ч = об/мин x L[0.1 мм] x 60 / 1000000. Переполнение - выше ~11400 об/мин (колесо 500 мм - ~1000 км/ч)
+						common_data->speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdNew::RpmRatio);
+						_OdometerUpdate(common_data->odometer, packet->rpm, FdNew::RpmRatio, FdNew::LinkTimeout, time);
 						common_data->gear = GetGear(packet);
 						common_data->roll = GetRoll(packet);
 						
@@ -120,25 +122,6 @@ class MotorFardriverNew : public MotorDeviceInterface
 					case 0xAC:
 					case 0xB2:
 					{
-						break;
-					}
-					
-					case 0x94:
-					{
-						FdNew::packet_94_t *packet = (FdNew::packet_94_t *) _data;
-						
-						_odometer_low = packet->odometer_low;
-						
-						break;
-					}
-					
-					case 0x98:
-					{
-						FdNew::packet_98_t *packet = (FdNew::packet_98_t *) _data;
-						
-						// Младшая часть приходит раньше (0x94), старшая - здесь. Масштаб 0.1 км = MotorData::odometer (100 м)
-						common_data->odometer = ((uint32_t)packet->odometer_high << 16) | _odometer_low;
-						
 						break;
 					}
 					
@@ -199,7 +182,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 			else
 			{
 				// Если от контроллера давно не было данных
-				if(_error.code != ERROR_LOST && time - _last_response_time > 1000)
+				if(_error.code != ERROR_LOST && time - _last_response_time > FdNew::LinkTimeout)
 				{
 					_manager->ResetCommonData(_idx);
 					_error.code = ERROR_LOST;
@@ -207,7 +190,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 				}
 			}
 			
-			if(time - _last_request_time > FdNew::PacketRequestInerval)
+			if(time - _last_request_time > FdNew::PacketRequestInterval)
 			{
 				_last_request_time = time;
 
@@ -240,6 +223,17 @@ class MotorFardriverNew : public MotorDeviceInterface
 			return;
 		}
 		
+		// Команда контроллеру (MotorFardriverNew_Ctrl.h). false - нет такой команды, не то число параметров или неверные значения.
+		template<typename... Args>
+		bool SendCmd(FdNew::cmd_t cmd, Args... args)
+		{
+			const uint16_t p[] = { (uint16_t)args..., 0 };	// "+ 0": у команды без параметров массив не пустой
+			
+			return _SendCmd(cmd, p, sizeof...(Args));
+		}
+		
+	private:
+		
 		// Передача: D0 биты 0-1
 		static inline MMD::gear_t GetGear(const FdNew::packet_80_t *packet)
 		{
@@ -264,43 +258,44 @@ class MotorFardriverNew : public MotorDeviceInterface
 			
 			return (forward == true) ? MMD::ROLL_FORWARD : MMD::ROLL_REVERSE;
 		}
-		
-	private:
-		
-		// Компиляторный барьер: запрещает переносить обращения к памяти (_data) через флаги.
-		// На одноядерном Cortex-M3 этого достаточно, __DMB() не нужен.
-		static inline void _Barrier()
-		{
-			__asm__ __volatile__("" ::: "memory");
-		}
-		
+
 		bool _CheckCRCSum(const uint8_t *array)
 		{
-			uint16_t crc = 0x7F3C;
-			
-			for(uint8_t idx = 0; idx < 14; ++idx)
-			{
-				crc ^= (uint16_t)array[idx];
-				for(uint8_t i = 8; i != 0; --i)
-				{
-					if((crc & 0x0001) != 0)
-					{
-						crc >>= 1;
-						crc ^= 0xA001;
-					}
-					else
-					{
-						crc >>= 1;
-					}
-				}
-			}
+			uint16_t crc = FdNew::CRC16(array, 14);
 			
 			return ( (crc & 0xFF) == array[14] && ((crc >> 8) & 0xFF) == array[15] );
+		}
+		
+		// Найти команду, проверить число параметров, собрать пакет(ы) и отправить
+		bool _SendCmd(FdNew::cmd_t cmd, const uint16_t *p, uint8_t count)
+		{
+			for(const FdNew::cmd_desc_t &desc : FdNew::Commands)
+			{
+				if(desc.cmd != cmd) continue;
+				if(desc.args != count) return false;
+				
+				uint8_t buf[FdNew::PacketSize * 2];
+				uint8_t length = desc.build(buf, p);
+				if(length == 0) return false;
+				
+				_manager->RawTx(_idx, buf, length);
+				
+				return true;
+			}
+			
+			return false;
 		}
 		
 		void _PostProcessing()
 		{
 			return;
+		}
+
+		// Компиляторный барьер: запрещает переносить обращения к памяти (_data) через флаги.
+		// На одноядерном Cortex-M3 этого достаточно, __DMB() не нужен.
+		static inline void _Barrier()
+		{
+			__asm__ __volatile__("" ::: "memory");
 		}
 
 		callback_ready_t _callback_ready;	// Колбек принятого пакета, если указан
@@ -310,7 +305,6 @@ class MotorFardriverNew : public MotorDeviceInterface
 		volatile bool _busy;				// Флаг того, что разбор данных не окончен и новые копировать нельзя
 		volatile bool _ready;				// Флаг того, что массив данные приняты и готовы к анализу
 		volatile bool _alarm;				// Контроллер сообщает об аварии (error_flags & ErrorAlarmMask)
-		uint16_t _odometer_low;				// Младшее слово пробега из пакета 0x94
 		
 		uint8_t _data[FdNew::PacketSize];	// Холодный массив данных (Работа в программе)
 
