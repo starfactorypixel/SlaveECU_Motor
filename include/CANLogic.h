@@ -1,13 +1,13 @@
 #pragma once
 #include <DrakePinD.hpp>
 #include <CANLibrary.h>
-#include "CanObj/CanBlockInfo.hpp"
-#include "CanObj/CanBlockCfg.hpp"
-#include "CAN/CanMotorThrottle.hpp"
+#include <CanObj/CanBlockInfo.hpp>
+#include <CanObj/CanBlockCfg.hpp>
+#include <CanObj/CanGuardedChannel.hpp>
 #include "CAN/CanMotorCtrl.hpp"
 #include "CAN/CanMotorParam.hpp"
 #include "CAN/CanMotorGearRollParam.hpp"
-#include "CanObj/CanStreamObj.hpp"
+#include <CanObj/CanStreamObj.hpp>
 #include "CANFunc.h"
 
 extern CAN_HandleTypeDef hcan;
@@ -26,8 +26,8 @@ namespace CANLib
 
 	CanBlockInfo obj_block_info(CAN_BASE_ID+0, OnStaticInfoReq, OnDynamicInfoReq);
 	CanBlockCfg obj_block_cfg(CAN_BASE_ID+1, OnCfgSaveReset, block_cfg_table, block_cfg_table_count);
-	CanMotorThrottle obj_throttle_value_1(CAN_BASE_ID+4, Motors::MOTOR_1, MotorCtrl::SetThrottle);
-	CanMotorThrottle obj_throttle_value_2(CAN_BASE_ID+5, Motors::MOTOR_2, MotorCtrl::SetThrottle);
+	CanGuardedChannel<uint16_t> obj_throttle_value_1(CAN_BASE_ID+4, Motors::MOTOR_1, MotorCtrl::SetThrottle, MotorCtrl::SetFailsafe);
+	CanGuardedChannel<uint16_t> obj_throttle_value_2(CAN_BASE_ID+5, Motors::MOTOR_2, MotorCtrl::SetThrottle, MotorCtrl::SetFailsafe);
 	CanMotorCtrl obj_transmission_value_1(CAN_BASE_ID+6, Motors::MOTOR_1, MotorCtrl::SetGear);
 	CanMotorCtrl obj_transmission_value_2(CAN_BASE_ID+7, Motors::MOTOR_2, MotorCtrl::SetGear);
 	CanMotorCtrl obj_brakerecuperation_flag_1(CAN_BASE_ID+8, Motors::MOTOR_1, MotorCtrl::SetBreak);
@@ -149,6 +149,9 @@ namespace CANLib
 		can_manager.AddObject(obj_temperature_controller_2);
 		can_manager.AddObject(obj_odometer);
 		can_manager.AddObject(obj_temperature);
+
+		obj_throttle_value_1.SetBypass(true);
+		obj_throttle_value_2.SetBypass(true);
 
 		CAN_Enable();
 		

@@ -60,7 +60,7 @@ namespace MotorCtrl
 		return;
 	}
 
-	// 
+	// Управление газом
 	void SetThrottle(uint8_t idx, uint16_t raw)
 	{
 		const auto &cfg = Config::obj.body.throttle;
@@ -73,6 +73,19 @@ namespace MotorCtrl
 			default: break;
 		}
 		
+		return;
+	}
+
+	// Вход в аварийный режим
+	void SetFailsafe(uint8_t idx)
+	{
+		switch(idx)
+		{
+			case 0: __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, Config::obj.body.throttle.pwm_min); break;
+			case 1: __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, Config::obj.body.throttle.pwm_min); break;
+			default: break;
+		}
+
 		return;
 	}
 
