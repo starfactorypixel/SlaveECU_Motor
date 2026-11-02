@@ -89,24 +89,6 @@ class MotorDeviceInterface
 			return;
 		}
 		
-		void _ReverseArray(uint8_t *array, uint8_t length)
-		{
-			uint8_t i = 0;
-			uint8_t j = length - 1;
-			uint8_t temp;
-			while(i < j)
-			{
-				temp = array[i];
-				array[i] = array[j];
-				array[j] = temp;
-				
-				i++;
-				j--;
-			}
-
-			return;
-		}
-		
 		bool _initiated;				// Флаг того, что объект был добавлен в менеджер
 		MotorManager *_manager;			// Указатель на менеджер
 		uint8_t _idx;					// Индекс порта

@@ -33,11 +33,11 @@ namespace MotorCtrl
 		
 		switch(mask)
 		{
-			case MotorManagerData::GEAR_NEUTRAL: { gear = GEAR_NEUTRAL; break; }
-			case MotorManagerData::GEAR_FORWARD: { gear = GEAR_FORWARD_HI; break; }
-			case MotorManagerData::GEAR_REVERSE: { gear = GEAR_REVERSE; break; }
-			case MotorManagerData::GEAR_LOW: { gear = GEAR_FORWARD_LOW; break; }
-			//case MotorManagerData::GEAR_BOOST:   { gear = GEAR_BOOST; break; }
+			case MotorData::GEAR_NEUTRAL: { gear = GEAR_NEUTRAL; break; }
+			case MotorData::GEAR_FORWARD: { gear = GEAR_FORWARD_HI; break; }
+			case MotorData::GEAR_REVERSE: { gear = GEAR_REVERSE; break; }
+			case MotorData::GEAR_LOW: { gear = GEAR_FORWARD_LOW; break; }
+			//case MotorData::GEAR_BOOST:   { gear = GEAR_BOOST; break; }
 			default: { gear = GEAR_NEUTRAL; break; }
 		}
 		

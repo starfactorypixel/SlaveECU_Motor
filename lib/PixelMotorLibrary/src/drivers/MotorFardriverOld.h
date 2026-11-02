@@ -1,12 +1,13 @@
 #pragma once
 #include <inttypes.h>
 #include <string.h>
+#include <CUtils_String.h>
 #include <MotorManager.h>
 #include <MotorDeviceInterface.h>
 #include "MotorFardriverOld_Data.h"
 
 namespace FdOld = FardriverOld;
-namespace MMD = MotorManagerData;
+namespace MMD = MotorData;
 
 class MotorFardriverOld : public MotorDeviceInterface
 {
@@ -44,21 +45,20 @@ class MotorFardriverOld : public MotorDeviceInterface
 				_need_auth = false;
 			}
 			
+			// Объект-хранилище данных мотора
+			MotorData::MotorDataObj &motor_data = _manager->motor_data[_idx];
+
 			// Если данные от контроллера приняты
 			if(_ready == true)
 			{
 				_ready = false;
 				_Barrier();		// _data читаем только после флага _ready
-			
-				// Т.к. данные представлены в формате big-endian, обращаем массив для простоты работы
-				_ReverseArray(_data, sizeof(_data));
 
 				_PostProcessing();
 
 				// Напихиваем полезные данные в общий объект
 				FdOld::packet_raw_t *raw = (FdOld::packet_raw_t *) _data;
-				MMD::common_data_t *common_data = &_manager->common_data[_idx];
-				
+
 				switch(raw->_A1)
 				{
 					case 0x00:
@@ -72,13 +72,13 @@ class MotorFardriverOld : public MotorDeviceInterface
 							_error.code = (alarm == true) ? ERROR_CTRL : ERROR_NONE;
 						}
 						
-						common_data->errors = packet->error_flags;
-						common_data->rpm = packet->rpm / FdOld::RpmRatio;
+						motor_data.data.errors = packet->error_flags;
+						motor_data.data.rpm = packet->rpm / FdOld::RpmRatio;
 						// 0.1 км/ч = об/мин x L[0.1 мм] x 60 / 1000000. Переполнение - выше ~11400 об/мин (колесо 500 мм - ~1000 км/ч)
-						common_data->speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdOld::RpmRatio);
-						_OdometerUpdate(common_data->odometer, packet->rpm, FdOld::RpmRatio, FdOld::LinkTimeout, time);
-						common_data->gear = FixGear(packet->gear);
-						common_data->roll = FixRoll(packet->gear, packet->roll);
+						motor_data.data.speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdOld::RpmRatio);
+						_OdometerUpdate(motor_data.data.odometer, packet->rpm, FdOld::RpmRatio, FdOld::LinkTimeout, time);
+						motor_data.data.gear = FixGear(packet->gear);
+						motor_data.data.roll = FixRoll(packet->gear, packet->roll);
 						
 						break;
 					}
@@ -91,10 +91,10 @@ class MotorFardriverOld : public MotorDeviceInterface
 						if(power > INT16_MAX) power = INT16_MAX;
 						if(power < INT16_MIN) power = INT16_MIN;
 						
-						common_data->voltage = packet->voltage;
-						common_data->current = ((int32_t)packet->current * 10) / 4;
-						common_data->power = (int16_t)power;
-						common_data->throttle = packet->throttle;
+						motor_data.data.voltage = packet->voltage;
+						motor_data.data.current = ((int32_t)packet->current * 10) / 4;
+						motor_data.data.power = (int16_t)power;
+						motor_data.data.throttle = packet->throttle;
 						
 						break;
 					}
@@ -102,7 +102,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_04_t *packet = (FdOld::packet_04_t *) _data;
 						
-						common_data->temp_controller = FixTemp(packet->temp_controller);
+						motor_data.data.temp_controller = FixTemp(packet->temp_controller);
 						
 						break;
 					}
@@ -110,7 +110,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_0D_t *packet = (FdOld::packet_0D_t *) _data;
 						
-						common_data->temp_motor = FixTemp(packet->temp_motor);
+						motor_data.data.temp_motor = FixTemp(packet->temp_motor);
 						
 						break;
 					}
@@ -119,8 +119,8 @@ class MotorFardriverOld : public MotorDeviceInterface
 						// Пока не получим первый раз последний пакет посылки от контроллера (0x0C) - считаем что данные не готовы.
 						// На самом деле это предпоследний пакет посылки, но последний это 0x00 и его сложно отследить.
 						// В последствии считаем что данные актуальны, хоть и опаздывают.
-						_manager->common_data_ready[_idx] = true;
-						
+						motor_data.Ready(true);
+
 						break;
 					}
 				}
@@ -142,7 +142,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 				// Если от контроллера давно не было данных
 				if(_error.code != ERROR_LOST && time - _last_response_time > FdOld::LinkTimeout)
 				{
-					_manager->ResetCommonData(_idx);
+					motor_data.Clear();
 					_error.code = ERROR_LOST;
 					_alarm = false;
 				}
@@ -229,6 +229,9 @@ class MotorFardriverOld : public MotorDeviceInterface
 		
 		void _PostProcessing()
 		{
+			// Т.к. данные представлены в формате big-endian, обращаем массив для простоты работы
+			array_reverse(_data, sizeof(_data));
+			
 			return;
 		}
 

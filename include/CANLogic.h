@@ -40,8 +40,8 @@ namespace CANLib
 	// Т.к. нету проверки manager.common_data_ready[0] == true то даже пусыте данные будут считаться валидными.
 	// Вариант сделать common_data ввиде класса с методами get set и возвращаеть через get ошибку если данных нет или устарели
 
-	auto &data1 = Motors::manager.common_data[Motors::MOTOR_1];
-	auto &data2 = Motors::manager.common_data[Motors::MOTOR_2];
+	auto &data1 = Motors::manager.motor_data[Motors::MOTOR_1].data;
+	auto &data2 = Motors::manager.motor_data[Motors::MOTOR_2].data;
 
 	
 

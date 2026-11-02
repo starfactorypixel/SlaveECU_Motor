@@ -51,16 +51,3 @@ void MotorManager::RawTx(uint8_t idx, const uint8_t *raw, const uint8_t length)
 	
 	return;
 }
-
-void MotorManager::ResetCommonData(uint8_t idx)
-{
-	if(idx >= _max_dev) return;
-	
-	// Одометр - накопленное значение, при потере связи его не обнуляем
-	uint32_t odometer = common_data[idx].odometer;
-	memset(&common_data[idx], 0x00, sizeof(MotorManagerData::common_data_t));
-	common_data[idx].odometer = odometer;
-	common_data_ready[idx] = false;
-
-	return;
-}

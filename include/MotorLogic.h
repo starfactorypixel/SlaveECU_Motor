@@ -56,7 +56,7 @@ namespace Motors
 	{
 		DEBUG_LOG_TOPIC("MOTOR-ERR", "idx: %d, code: %d\n", idx, code);
 
-		BlockInfoSender.SendErrorMsg(idx+1, code, manager.common_data[idx].errors);
+		BlockInfoSender.SendErrorMsg(idx+1, code, manager.motor_data[idx].data.errors);
 
 		/*
 		switch(idx)
@@ -119,7 +119,7 @@ namespace Motors
 
 /*
 			uint32_t total_odometer = 0;
-			MotorManagerData::common_data_t *common_data;
+			MotorData::common_data_t *common_data;
 			
 			if(manager.common_data_ready[0] == true)
 			{

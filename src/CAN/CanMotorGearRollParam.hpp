@@ -9,7 +9,7 @@ class CanMotorGearRollParam : public CANObjectBase
 	struct __attribute__((packed)) event_ok_t { uint8_t fId = CAN_FUNC_EVENT_OK; uint8_t gear; uint8_t roll; };
 	
 	public:
-		CanMotorGearRollParam(can_object_id_t id, MotorManagerData::gear_t *gear_ptr, MotorManagerData::roll_t *roll_ptr, uint16_t timer) : CANObjectBase(id), _gear_ptr(gear_ptr), _roll_ptr(roll_ptr)
+		CanMotorGearRollParam(can_object_id_t id, MotorData::gear_t *gear_ptr, MotorData::roll_t *roll_ptr, uint16_t timer) : CANObjectBase(id), _gear_ptr(gear_ptr), _roll_ptr(roll_ptr)
 		{
 			this->SetTimerPeriod(timer);
 
@@ -58,6 +58,6 @@ class CanMotorGearRollParam : public CANObjectBase
 		}
 		
 	private:
-		MotorManagerData::gear_t *_gear_ptr;
-		MotorManagerData::roll_t *_roll_ptr;
+		MotorData::gear_t *_gear_ptr;
+		MotorData::roll_t *_roll_ptr;
 };

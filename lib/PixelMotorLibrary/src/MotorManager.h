@@ -16,9 +16,7 @@ class MotorManager
 		MotorManager(callback_tx_t tx, callback_error_t error) : _callback_tx(tx), _callback_error(error)
 		{
 			memset(_device, 0x00, sizeof(_device));
-			memset(common_data, 0x00, sizeof(common_data));
-			memset(common_data_ready, 0x00, sizeof(common_data_ready));
-			
+
 			return;
 		}
 		
@@ -26,10 +24,8 @@ class MotorManager
 		void Tick(uint32_t &time);
 		void RawRx(uint8_t idx, const uint8_t *raw, const uint8_t length);
 		void RawTx(uint8_t idx, const uint8_t *raw, const uint8_t length);
-		void ResetCommonData(uint8_t idx);
 		
-		MotorManagerData::common_data_t common_data[_max_dev];
-		bool common_data_ready[_max_dev];
+		MotorData::MotorDataObj motor_data[_max_dev];
 		
 	private:
 

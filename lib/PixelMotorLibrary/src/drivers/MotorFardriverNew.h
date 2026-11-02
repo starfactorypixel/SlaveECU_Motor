@@ -7,7 +7,7 @@
 #include "MotorFardriverNew_Ctrl.h"
 
 namespace FdNew = FardriverNew;
-namespace MMD = MotorManagerData;
+namespace MMD = MotorData;
 
 class MotorFardriverNew : public MotorDeviceInterface
 {
@@ -45,6 +45,9 @@ class MotorFardriverNew : public MotorDeviceInterface
 				_need_auth = false;
 			}
 			
+			// Объект-хранилище данных мотора
+			MotorData::MotorDataObj &motor_data = _manager->motor_data[_idx];
+
 			// Если данные от контроллера приняты
 			if(_ready == true)
 			{
@@ -55,8 +58,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 
 				// Напихиваем полезные данные в общий объект
 				FdNew::packet_raw_t *raw = (FdNew::packet_raw_t *) _data;
-				MMD::common_data_t *common_data = &_manager->common_data[_idx];
-				
+
 				switch(raw->_A1)
 				{
 					case 0x80:
@@ -78,13 +80,13 @@ class MotorFardriverNew : public MotorDeviceInterface
 							_error.code = (alarm == true) ? ERROR_CTRL : ERROR_NONE;
 						}
 						
-						common_data->errors = packet->error_flags;
-						common_data->rpm = packet->rpm / FdNew::RpmRatio;
+						motor_data.data.errors = packet->error_flags;
+						motor_data.data.rpm = packet->rpm / FdNew::RpmRatio;
 						// 0.1 км/ч = об/мин x L[0.1 мм] x 60 / 1000000. Переполнение - выше ~11400 об/мин (колесо 500 мм - ~1000 км/ч)
-						common_data->speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdNew::RpmRatio);
-						_OdometerUpdate(common_data->odometer, packet->rpm, FdNew::RpmRatio, FdNew::LinkTimeout, time);
-						common_data->gear = GetGear(packet);
-						common_data->roll = GetRoll(packet);
+						motor_data.data.speed = (uint32_t)packet->rpm * _wheel_length * 6 / (100000UL * FdNew::RpmRatio);
+						_OdometerUpdate(motor_data.data.odometer, packet->rpm, FdNew::RpmRatio, FdNew::LinkTimeout, time);
+						motor_data.data.gear = GetGear(packet);
+						motor_data.data.roll = GetRoll(packet);
 						
 						break;
 					}
@@ -105,10 +107,10 @@ class MotorFardriverNew : public MotorDeviceInterface
 						if(power > INT16_MAX) power = INT16_MAX;
 						if(power < INT16_MIN) power = INT16_MIN;
 						
-						common_data->voltage = packet->voltage;
-						common_data->current = ((int32_t)packet->current * 10) / 4;
-						common_data->power = (int16_t)power;
-						common_data->throttle = packet->throttle;
+						motor_data.data.voltage = packet->voltage;
+						motor_data.data.current = ((int32_t)packet->current * 10) / 4;
+						motor_data.data.power = (int16_t)power;
+						motor_data.data.throttle = packet->throttle;
 						
 						break;
 					}
@@ -129,7 +131,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_99_t *packet = (FdNew::packet_99_t *) _data;
 						
-						common_data->throttle_voltage = packet->throttle_voltage;
+						motor_data.data.throttle_voltage = packet->throttle_voltage;
 						
 						break;
 					}
@@ -138,7 +140,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_B3_t *packet = (FdNew::packet_B3_t *) _data;
 						
-						common_data->temp_controller = packet->temp_controller;
+						motor_data.data.temp_controller = packet->temp_controller;
 						
 						break;
 					}
@@ -147,7 +149,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_B5_t *packet = (FdNew::packet_B5_t *) _data;
 						
-						common_data->temp_motor = packet->temp_motor;
+						motor_data.data.temp_motor = packet->temp_motor;
 						
 						break;
 					}
@@ -156,7 +158,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						// Пока не получим первый раз последний пакет в посылки от контроллера (0xB6) - считаем что данные не готовы.
 						// В последствии считаем что данные актуальны, хоть и опаздывают.
-						_manager->common_data_ready[_idx] = true;
+						motor_data.Ready(true);
 						
 						break;
 					}
@@ -184,7 +186,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 				// Если от контроллера давно не было данных
 				if(_error.code != ERROR_LOST && time - _last_response_time > FdNew::LinkTimeout)
 				{
-					_manager->ResetCommonData(_idx);
+					motor_data.Clear();
 					_error.code = ERROR_LOST;
 					_alarm = false;
 				}

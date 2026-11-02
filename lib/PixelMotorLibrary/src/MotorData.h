@@ -1,9 +1,9 @@
 #pragma once
 #include <inttypes.h>
 
-namespace MotorManagerData
+namespace MotorData
 {
-	// 
+	// Передача
 	enum gear_t : uint8_t
 	{
 		GEAR_NEUTRAL = 0x00,
@@ -14,7 +14,7 @@ namespace MotorManagerData
 		GEAR_UNKNOWN = 0xFF
 	};
 	
-	// 
+	// Вращение колёс
 	enum roll_t : uint8_t
 	{
 		ROLL_STOP = 0x00,
@@ -23,20 +23,54 @@ namespace MotorManagerData
 		ROLL_UNKNOWN = 0xFF
 	};
 
-	struct common_data_t
+	// Объект-хранилище данных мотора 
+	class MotorDataObj
 	{
-		uint16_t errors;
-		uint16_t rpm;				// 1.0 RPM
-		gear_t gear;				// by gear_t
-		roll_t roll;				// by roll_t
-		uint16_t voltage;			// 0.1 V
-		int16_t current;			// 0.1 A
-		int16_t throttle;			// 1.0 %
-		int16_t temp_controller;	// 1.0 C
-		int16_t temp_motor;			// 1.0 C
-		uint32_t odometer;			// 100 m
-		uint16_t speed;				// 0.1 kmh
-		int16_t power;				// 1.0 W
-		uint16_t throttle_voltage;	// 10 mV
+		public:
+		
+			struct common_data_t
+			{
+				uint16_t errors;
+				uint16_t rpm;				// 1.0 RPM
+				gear_t gear;				// by gear_t
+				roll_t roll;				// by roll_t
+				uint16_t voltage;			// 0.1 V
+				int16_t current;			// 0.1 A
+				int16_t throttle;			// 1.0 %
+				int16_t temp_controller;	// 1.0 C
+				int16_t temp_motor;			// 1.0 C
+				uint32_t odometer;			// 100 m
+				uint16_t speed;				// 0.1 kmh
+				int16_t power;				// 1.0 W
+				uint16_t throttle_voltage;	// 10 mV
+			} data = {};
+			
+			bool Ready()
+			{
+				return _ready;
+			}
+			
+			void Ready(bool ready)
+			{
+				_ready = ready;
+				
+				return;
+			}
+			
+			void Clear()
+			{
+				Ready(false);
+				
+				// Одометр не очищаем никогда
+				uint32_t odometer = data.odometer;
+				memset(&data, 0x00, sizeof(data));
+				data.odometer = odometer;
+				
+				return;
+			}
+			
+		private:
+			
+			bool _ready = false;
 	};
-}
+};
