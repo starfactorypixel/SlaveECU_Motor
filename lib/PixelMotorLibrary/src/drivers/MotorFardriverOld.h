@@ -7,7 +7,6 @@
 #include "MotorFardriverOld_Data.h"
 
 namespace FdOld = FardriverOld;
-namespace MMD = MotorData;
 
 class MotorFardriverOld : public MotorDeviceInterface
 {
@@ -187,27 +186,27 @@ class MotorFardriverOld : public MotorDeviceInterface
 		}
 		
 		// Передача: младший полубайт, биты 0-1 (биты 2-3 - уровень скорости). 0x0C - N, 0x01 - D, 0x0E - R.
-		static inline MMD::gear_t FixGear(uint8_t raw)
+		static inline MotorData::gear_t FixGear(uint8_t raw)
 		{
 			switch(raw & 0x03)
 			{
-				case 0x00: { return MMD::GEAR_NEUTRAL; }
-				case 0x01: { return MMD::GEAR_FORWARD; }
-				case 0x02: { return MMD::GEAR_REVERSE; }
-				default:   { return MMD::GEAR_LOW; }
+				case 0x00: { return MotorData::GEAR_NEUTRAL; }
+				case 0x01: { return MotorData::GEAR_FORWARD; }
+				case 0x02: { return MotorData::GEAR_REVERSE; }
+				default:   { return MotorData::GEAR_LOW; }
 			}
 		}
 		
 		// Направление: старший полубайт - 0 стоит, 1 вращается в сторону передачи, 2 и больше - против.
 		// Передача R задаёт движение назад, N/D/Low - вперёд (как в ПО Fardriver).
-		static inline MMD::roll_t FixRoll(uint8_t gear, uint8_t raw)
+		static inline MotorData::roll_t FixRoll(uint8_t gear, uint8_t raw)
 		{
-			if(raw == 0) return MMD::ROLL_STOP;
+			if(raw == 0) return MotorData::ROLL_STOP;
 			
 			bool forward = ((gear & 0x03) != 0x02);
 			if(raw >= 2) forward = !forward;
 			
-			return (forward == true) ? MMD::ROLL_FORWARD : MMD::ROLL_REVERSE;
+			return (forward == true) ? MotorData::ROLL_FORWARD : MotorData::ROLL_REVERSE;
 		}
 		
 	private:

@@ -7,7 +7,6 @@
 #include "MotorFardriverNew_Ctrl.h"
 
 namespace FdNew = FardriverNew;
-namespace MMD = MotorData;
 
 class MotorFardriverNew : public MotorDeviceInterface
 {
@@ -237,28 +236,28 @@ class MotorFardriverNew : public MotorDeviceInterface
 	private:
 		
 		// Передача: D0 биты 0-1
-		static inline MMD::gear_t GetGear(const FdNew::packet_80_t *packet)
+		static inline MotorData::gear_t GetGear(const FdNew::packet_80_t *packet)
 		{
 			switch(packet->gear)
 			{
-				case FdNew::GEAR_RAW_NEUTRAL: { return MMD::GEAR_NEUTRAL; }
-				case FdNew::GEAR_RAW_FORWARD: { return MMD::GEAR_FORWARD; }
-				case FdNew::GEAR_RAW_REVERSE: { return MMD::GEAR_REVERSE; }
-				case FdNew::GEAR_RAW_LOW:     { return MMD::GEAR_LOW; }
-				default:                      { return MMD::GEAR_UNKNOWN; }
+				case FdNew::GEAR_RAW_NEUTRAL: { return MotorData::GEAR_NEUTRAL; }
+				case FdNew::GEAR_RAW_FORWARD: { return MotorData::GEAR_FORWARD; }
+				case FdNew::GEAR_RAW_REVERSE: { return MotorData::GEAR_REVERSE; }
+				case FdNew::GEAR_RAW_LOW:     { return MotorData::GEAR_LOW; }
+				default:                      { return MotorData::GEAR_UNKNOWN; }
 			}
 		}
 		
 		// Направление вращения: D0 бит 5 - вращается, бит 4 - против направления передачи.
 		// Передача R задаёт движение назад, N/D/Low - вперёд. Бит 6 (WEAK) и бит 7 к направлению не относятся.
-		static inline MMD::roll_t GetRoll(const FdNew::packet_80_t *packet)
+		static inline MotorData::roll_t GetRoll(const FdNew::packet_80_t *packet)
 		{
-			if(packet->moving == 0) return MMD::ROLL_STOP;
+			if(packet->moving == 0) return MotorData::ROLL_STOP;
 			
 			bool forward = (packet->gear != FdNew::GEAR_RAW_REVERSE);
 			if(packet->against == 1) forward = !forward;
 			
-			return (forward == true) ? MMD::ROLL_FORWARD : MMD::ROLL_REVERSE;
+			return (forward == true) ? MotorData::ROLL_FORWARD : MotorData::ROLL_REVERSE;
 		}
 
 		bool _CheckCRCSum(const uint8_t *array)

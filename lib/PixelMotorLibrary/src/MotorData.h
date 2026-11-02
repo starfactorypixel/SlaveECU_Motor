@@ -1,5 +1,6 @@
 #pragma once
 #include <inttypes.h>
+#include <string.h>
 
 namespace MotorData
 {
@@ -73,4 +74,4 @@ namespace MotorData
 			
 			bool _ready = false;
 	};
-};
+}
