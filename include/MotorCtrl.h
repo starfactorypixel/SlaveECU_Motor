@@ -18,40 +18,51 @@ namespace MotorCtrl
 	static uint8_t BREAK_RECOVERY_BIT = 2;
 	static uint8_t LOCK_BIT = 1;
 
+	#warning Rename Lock to Ignition
+
 	
 	// Управление передачей
-	void SetGear(uint8_t idx, shift_mask_gear_t gear)
+	void SetGear(uint8_t idx, uint8_t gear)
 	{
-		SPI::hc595.WriteByMask(idx, gear, GEAR_MASK);
-		
+		shift_mask_gear_t bit;
+		switch(gear)
+		{
+			case MotorData::GEAR_NEUTRAL: { bit = GEAR_NEUTRAL; break; }
+			case MotorData::GEAR_FORWARD: { bit = GEAR_FORWARD_HI; break; }
+			case MotorData::GEAR_REVERSE: { bit = GEAR_REVERSE; break; }
+			case MotorData::GEAR_LOW: { bit = GEAR_FORWARD_LOW; break; }
+			//case MotorData::GEAR_BOOST:   { bit = GEAR_BOOST; break; }
+			default: { bit = GEAR_NEUTRAL; break; }
+		}
+		SPI::hc595.WriteByMask(idx, bit, GEAR_MASK);
+
 		return;
 	}
 	
-	void SetGear(uint8_t idx, uint8_t mask)
+	// Запрос передачи
+	uint8_t GetGear(uint8_t idx)
 	{
-		shift_mask_gear_t gear;
-		
-		switch(mask)
-		{
-			case MotorData::GEAR_NEUTRAL: { gear = GEAR_NEUTRAL; break; }
-			case MotorData::GEAR_FORWARD: { gear = GEAR_FORWARD_HI; break; }
-			case MotorData::GEAR_REVERSE: { gear = GEAR_REVERSE; break; }
-			case MotorData::GEAR_LOW: { gear = GEAR_FORWARD_LOW; break; }
-			//case MotorData::GEAR_BOOST:   { gear = GEAR_BOOST; break; }
-			default: { gear = GEAR_NEUTRAL; break; }
-		}
-		
-		return SetGear(idx, gear);
+		return Motors::manager.motor_data[idx].data.gear;
 	}
 	
-	// Управление рекупирацией (тормозом)
+	
+	// Управление рекуперацией (тормозом)
 	void SetBreak(uint8_t idx, uint8_t state)
 	{
 		SPI::hc595.SetState(idx, BREAK_RECOVERY_BIT, ((state == 0) ? false : true));
 		
 		return;
 	}
-	
+
+	// Запрос состояния рекуперации (тормоза)
+	uint8_t GetBreak(uint8_t idx)
+	{
+		bool state = SPI::hc595.GetState(idx, BREAK_RECOVERY_BIT);
+		
+		return ((state) ? 0xFF : 0x00);
+	}
+
+
 	// Управление питанием контроллера (замок зажигания)
 	void SetLock(uint8_t idx, uint8_t state)
 	{
@@ -59,6 +70,15 @@ namespace MotorCtrl
 		
 		return;
 	}
+
+	// Запрос состояния питания контроллера (замок зажигания)
+	uint8_t GetLock(uint8_t idx)
+	{
+		bool state = SPI::hc595.GetState(idx, LOCK_BIT);
+		
+		return ((state) ? 0xFF : 0x00);
+	}
+
 
 	// Управление газом
 	void SetThrottle(uint8_t idx, uint16_t raw)

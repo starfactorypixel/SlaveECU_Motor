@@ -4,8 +4,8 @@
 #include <CanObj/CanBlockInfo.hpp>
 #include <CanObj/CanBlockCfg.hpp>
 #include <CanObj/CanGuardedChannel.hpp>
-#include "CAN/CanMotorCtrl.hpp"
-#include "CAN/CanMotorParam.hpp"
+#include <CanObj/CanCtrlParam.hpp>
+#include "CANObj/CanInfoParamPtr.hpp"
 #include "CAN/CanMotorGearRollParam.hpp"
 #include <CanObj/CanStreamObj.hpp>
 #include "CANFunc.h"
@@ -28,12 +28,30 @@ namespace CANLib
 	CanBlockCfg obj_block_cfg(CAN_BASE_ID+1, OnCfgSaveReset, block_cfg_table, block_cfg_table_count);
 	CanGuardedChannel<uint16_t> obj_throttle_value_1(CAN_BASE_ID+4, Motors::MOTOR_1, MotorCtrl::SetThrottle, MotorCtrl::SetFailsafe);
 	CanGuardedChannel<uint16_t> obj_throttle_value_2(CAN_BASE_ID+5, Motors::MOTOR_2, MotorCtrl::SetThrottle, MotorCtrl::SetFailsafe);
-	CanMotorCtrl obj_transmission_value_1(CAN_BASE_ID+6, Motors::MOTOR_1, MotorCtrl::SetGear);
-	CanMotorCtrl obj_transmission_value_2(CAN_BASE_ID+7, Motors::MOTOR_2, MotorCtrl::SetGear);
-	CanMotorCtrl obj_brakerecuperation_flag_1(CAN_BASE_ID+8, Motors::MOTOR_1, MotorCtrl::SetBreak);
-	CanMotorCtrl obj_brakerecuperation_flag_2(CAN_BASE_ID+9, Motors::MOTOR_2, MotorCtrl::SetBreak);
-	CanMotorCtrl obj_ignitionlock_flag_1(CAN_BASE_ID+10, Motors::MOTOR_1, MotorCtrl::SetLock);
-	CanMotorCtrl obj_ignitionlock_flag_2(CAN_BASE_ID+11, Motors::MOTOR_2, MotorCtrl::SetLock);
+
+	template <Motors::motor_num_t motor, void (*SetFn)(uint8_t, uint8_t), typename T> 
+	void Setter(uint8_t fId, T value)
+	{
+		if(fId != 0x01) return;
+		SetFn(motor, value);
+	}
+
+	template <Motors::motor_num_t motor, uint8_t (*GetFn)(uint8_t), typename T> 
+	T Getter()
+	{
+		return GetFn(motor);
+	}
+
+	// Если отправить CAN_FUNC_TOGGLE_IN или CAN_FUNC_ACTION_IN то Setter игнорирует команду а класс выполнит Getter и вернёт актуальное значение
+	// Т.е. будет эффект как CAN_FUNC_REQUEST_IN
+
+	CanCtrlParam<uint8_t> obj_transmission_value_1(CAN_BASE_ID+6, &Setter<Motors::MOTOR_1, &MotorCtrl::SetGear>, &Getter<Motors::MOTOR_1, &MotorCtrl::GetGear>);
+	CanCtrlParam<uint8_t> obj_transmission_value_2(CAN_BASE_ID+7, &Setter<Motors::MOTOR_2, &MotorCtrl::SetGear>, &Getter<Motors::MOTOR_2, &MotorCtrl::GetGear>);
+	CanCtrlParam<uint8_t> obj_brakerecuperation_flag_1(CAN_BASE_ID+8, &Setter<Motors::MOTOR_1, &MotorCtrl::SetBreak>, &Getter<Motors::MOTOR_1, &MotorCtrl::GetBreak>);
+	CanCtrlParam<uint8_t> obj_brakerecuperation_flag_2(CAN_BASE_ID+9, &Setter<Motors::MOTOR_2, &MotorCtrl::SetBreak>, &Getter<Motors::MOTOR_2, &MotorCtrl::GetBreak>);
+	CanCtrlParam<uint8_t> obj_ignitionlock_flag_1(CAN_BASE_ID+10, &Setter<Motors::MOTOR_1, &MotorCtrl::SetLock>, &Getter<Motors::MOTOR_1, &MotorCtrl::GetLock>);
+	CanCtrlParam<uint8_t> obj_ignitionlock_flag_2(CAN_BASE_ID+11, &Setter<Motors::MOTOR_2, &MotorCtrl::SetLock>, &Getter<Motors::MOTOR_2, &MotorCtrl::GetLock>);
+
 	//obj_controller_errors_1
 	//obj_controller_errors_2
 
@@ -43,27 +61,25 @@ namespace CANLib
 	auto &data1 = Motors::manager.motor_data[Motors::MOTOR_1].data;
 	auto &data2 = Motors::manager.motor_data[Motors::MOTOR_2].data;
 
-	
-
-	CanMotorParam<uint16_t> obj_throttlevolt_1(CAN_BASE_ID+12, &data1.throttle_voltage, 1550);
-	CanMotorParam<uint16_t> obj_throttlevolt_2(CAN_BASE_ID+13, &data2.throttle_voltage, 1550);
-	CanMotorParam<uint16_t> obj_rpm_1(CAN_BASE_ID+14, &data1.rpm, 250);
-	CanMotorParam<uint16_t> obj_rpm_2(CAN_BASE_ID+15, &data2.rpm, 250);
-	CanMotorParam<uint16_t> obj_speed_1(CAN_BASE_ID+16, &data1.speed, 250);
-	CanMotorParam<uint16_t> obj_speed_2(CAN_BASE_ID+17, &data2.speed, 250);
-	CanMotorParam<uint16_t> obj_voltage_1(CAN_BASE_ID+18, &data1.voltage, 500);
-	CanMotorParam<uint16_t> obj_voltage_2(CAN_BASE_ID+19, &data2.voltage, 500);
-	CanMotorParam<int16_t> obj_current_1(CAN_BASE_ID+20, &data1.current, 500);
-	CanMotorParam<int16_t> obj_current_2(CAN_BASE_ID+21, &data2.current, 500);
-	CanMotorParam<int16_t> obj_power_1(CAN_BASE_ID+22, &data1.power, 500);
-	CanMotorParam<int16_t> obj_power_2(CAN_BASE_ID+23, &data2.power, 500);
+	CanInfoParamPtr<uint16_t> obj_throttlevolt_1(CAN_BASE_ID+12, 1550, &data1.throttle_voltage);
+	CanInfoParamPtr<uint16_t> obj_throttlevolt_2(CAN_BASE_ID+13, 1550, &data2.throttle_voltage);
+	CanInfoParamPtr<uint16_t> obj_rpm_1(CAN_BASE_ID+14, 250, &data1.rpm);
+	CanInfoParamPtr<uint16_t> obj_rpm_2(CAN_BASE_ID+15, 250, &data2.rpm);
+	CanInfoParamPtr<uint16_t> obj_speed_1(CAN_BASE_ID+16, 250, &data1.speed);
+	CanInfoParamPtr<uint16_t> obj_speed_2(CAN_BASE_ID+17, 250, &data2.speed);
+	CanInfoParamPtr<uint16_t> obj_voltage_1(CAN_BASE_ID+18, 500, &data1.voltage);
+	CanInfoParamPtr<uint16_t> obj_voltage_2(CAN_BASE_ID+19, 500, &data2.voltage);
+	CanInfoParamPtr<int16_t> obj_current_1(CAN_BASE_ID+20, 500, &data1.current);
+	CanInfoParamPtr<int16_t> obj_current_2(CAN_BASE_ID+21, 500, &data2.current);
+	CanInfoParamPtr<int16_t> obj_power_1(CAN_BASE_ID+22, 500, &data1.power);
+	CanInfoParamPtr<int16_t> obj_power_2(CAN_BASE_ID+23, 500, &data2.power);
 	CanMotorGearRollParam obj_gear_roll_1(CAN_BASE_ID+24, &data1.gear, &data1.roll, 500);
 	CanMotorGearRollParam obj_gear_roll_2(CAN_BASE_ID+25, &data2.gear, &data2.roll, 500);
-	CanMotorParam<int16_t> obj_temperature_motor_1(CAN_BASE_ID+26, &data1.temp_motor, 1000);
-	CanMotorParam<int16_t> obj_temperature_motor_2(CAN_BASE_ID+27, &data2.temp_motor, 1000);
-	CanMotorParam<int16_t> obj_temperature_controller_1(CAN_BASE_ID+28, &data1.temp_controller, 1000);
-	CanMotorParam<int16_t> obj_temperature_controller_2(CAN_BASE_ID+29, &data2.temp_controller, 1000);
-	CanMotorParam<uint32_t> obj_odometer(CAN_BASE_ID+30, &data1.odometer, 5000);													// может оба одометра?
+	CanInfoParamPtr<int16_t> obj_temperature_motor_1(CAN_BASE_ID+26, 1000, &data1.temp_motor);
+	CanInfoParamPtr<int16_t> obj_temperature_motor_2(CAN_BASE_ID+27, 1000, &data2.temp_motor);
+	CanInfoParamPtr<int16_t> obj_temperature_controller_1(CAN_BASE_ID+28, 1000, &data1.temp_controller);
+	CanInfoParamPtr<int16_t> obj_temperature_controller_2(CAN_BASE_ID+29, 1000, &data2.temp_controller);
+	CanInfoParamPtr<uint32_t> obj_odometer(CAN_BASE_ID+30, 5000, &data1.odometer);													// может оба одометра?
 	CanStreamObj<int8_t, 16> obj_temperature(CAN_BASE_ID+31);
 
 
@@ -72,11 +88,11 @@ namespace CANLib
 
 
 	template <typename T> 
-	static inline uint8_t GetTempStatus(T t)
+	static inline uint8_t GetTempStatus(uint8_t idx, const T value)
 	{
-		if(t <= 70)
+		if(value <= 70)
 			return CAN_FUNC_TIMER_NORMAL;
-		if(t <= 120)
+		if(value <= 120)
 			return CAN_FUNC_TIMER_WARNING;
 		
 		return CAN_FUNC_TIMER_CRITICAL;
@@ -116,6 +132,10 @@ namespace CANLib
 		obj_temperature_motor_2.SetValueClassifier(GetTempStatus);
 		obj_temperature_controller_1.SetValueClassifier(GetTempStatus);
 		obj_temperature_controller_2.SetValueClassifier(GetTempStatus);
+
+		#warning Add timer value on template?
+		obj_transmission_value_1.SetTimerPeriod(100);
+		obj_transmission_value_2.SetTimerPeriod(100);
 		
 		can_manager.AddObject(obj_block_info);
 		can_manager.AddObject(obj_block_cfg);
