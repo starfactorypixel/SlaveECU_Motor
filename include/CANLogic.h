@@ -5,8 +5,8 @@
 #include <CanObj/CanBlockCfg.hpp>
 #include <CanObj/CanGuardedChannel.hpp>
 #include <CanObj/CanCtrlParam.hpp>
-#include "CANObj/CanInfoParamPtr.hpp"
-#include "CAN/CanMotorGearRollParam.hpp"
+#include <CanObj/CanInfoParamPtr.hpp>
+#include "CanObj/CanMotorGearRollParam.hpp"
 #include <CanObj/CanStreamObj.hpp>
 #include "CANFunc.h"
 
