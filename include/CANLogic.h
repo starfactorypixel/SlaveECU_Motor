@@ -80,7 +80,7 @@ namespace CANLib
 	CanInfoParamPtr<int16_t> obj_temperature_controller_1(CAN_BASE_ID+28, 1000, &data1.temp_controller);
 	CanInfoParamPtr<int16_t> obj_temperature_controller_2(CAN_BASE_ID+29, 1000, &data2.temp_controller);
 	CanInfoParamPtr<uint32_t> obj_odometer(CAN_BASE_ID+30, 5000, &data1.odometer);													// может оба одометра?
-	CanStreamObj<int8_t, 16> obj_temperature(CAN_BASE_ID+31);
+	CanStreamObj<int16_t, 16> obj_temperature(CAN_BASE_ID+31);
 
 
 
