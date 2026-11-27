@@ -139,7 +139,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_B3_t *packet = (FdNew::packet_B3_t *) _data;
 						
-						motor_data.data.temp_controller = packet->temp_controller * 10;
+						motor_data.data.temp_controller = packet->temp_controller;
 						
 						break;
 					}
@@ -148,7 +148,7 @@ class MotorFardriverNew : public MotorDeviceInterface
 					{
 						FdNew::packet_B5_t *packet = (FdNew::packet_B5_t *) _data;
 						
-						motor_data.data.temp_motor = packet->temp_motor * 10;
+						motor_data.data.temp_motor = packet->temp_motor;
 						
 						break;
 					}

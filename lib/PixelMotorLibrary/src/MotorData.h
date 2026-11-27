@@ -38,8 +38,8 @@ namespace MotorData
 				uint16_t voltage;			// 0.1 V
 				int16_t current;			// 0.1 A
 				int16_t throttle;			// 1.0 %
-				int16_t temp_controller;	// 0.1 C
-				int16_t temp_motor;			// 0.1 C
+				int16_t temp_controller;	// 1.0 C
+				int16_t temp_motor;			// 1.0 C
 				uint32_t odometer;			// 100 m
 				uint16_t speed;				// 0.1 kmh
 				int16_t power;				// 1.0 W

@@ -41,7 +41,7 @@ namespace OneWire
 			for(uint8_t i = 0; i < count; ++i)
 			{
 				//if(sensor[i].IsValid() == false) continue;
-				CanTempStream.Set(i, sensor[i].GetTemp() / 10);
+				CanTempStream.Set(i, sensor[i].GetTemp8());
 
 				OneWireDriver::rom_t rom = sensor[i].GetRom();
 

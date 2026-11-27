@@ -101,7 +101,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_04_t *packet = (FdOld::packet_04_t *) _data;
 						
-						motor_data.data.temp_controller = FixTemp(packet->temp_controller) * 10;
+						motor_data.data.temp_controller = FixTemp(packet->temp_controller);
 						
 						break;
 					}
@@ -109,7 +109,7 @@ class MotorFardriverOld : public MotorDeviceInterface
 					{
 						FdOld::packet_0D_t *packet = (FdOld::packet_0D_t *) _data;
 						
-						motor_data.data.temp_motor = FixTemp(packet->temp_motor) * 10;
+						motor_data.data.temp_motor = FixTemp(packet->temp_motor);
 						
 						break;
 					}
